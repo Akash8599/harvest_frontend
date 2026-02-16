@@ -30,6 +30,7 @@ import { RootStackParamList } from '../../types';
 import { GlassCard } from '../../components/glassmorphism/GlassCard';
 import { GlassButton } from '../../components/glassmorphism/GlassButton';
 import { GlassInput } from '../../components/glassmorphism/GlassInput';
+import { GlassSearchBar } from '../../components/glassmorphism/GlassSearchBar';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -121,6 +122,9 @@ export const InspectionsScreen: React.FC = () => {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [video, setVideo] = useState<PhotoItem | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [inspectionToReview, setInspectionToReview] = useState<any>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [showInspectionModal, setShowInspectionModal] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   // GPS Removed as per user request
@@ -276,36 +280,57 @@ export const InspectionsScreen: React.FC = () => {
   });
 
   // -- Pre-fill form from request --
-  const handleStartRequest = (request: any) => {
-    console.log('=== DEBUG: handleStartRequest ===');
-    console.log('Request object:', request);
-    console.log('Request farmId:', request.farmId);
-    console.log('Farms data:', farmsData);
-    console.log('Farms data length:', farmsData?.length);
+  const [isLoadingFarmDetails, setIsLoadingFarmDetails] = useState(false);
 
-    // Find farm object matching request.farmId
-    const farm = farmsData?.find((f: Farm) => {
-      console.log(`Comparing farm.id (${f.id}) with request.farmId (${request.farmId})`);
-      return f.id === request.farmId;
-    });
+  const handleStartRequest = async (request: any) => {
+    if (isLoadingFarmDetails) return;
 
-    console.log('Found farm:', farm);
+    // 1. Try to find in loaded farms first
+    let farm = farmsData?.find((f: Farm) => f.id === request.farmId);
+
+    // 2. If not found locally, fetch from API
+    if (!farm) {
+      if (!request.farmId) {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Invalid request: No Farm ID' });
+        return;
+      }
+
+      try {
+        setIsLoadingFarmDetails(true);
+        Toast.show({ type: 'info', text1: 'Loading farm details...' });
+        const response = await farmApi.getFarmById(request.farmId);
+        if (response.data && response.data.data) {
+          farm = response.data.data;
+        } else {
+          throw new Error('Farm data not found in response');
+        }
+      } catch (error) {
+        console.error('Failed to fetch farm details:', error);
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load farm details. Please try again.' });
+        return;
+      } finally {
+        setIsLoadingFarmDetails(false);
+      }
+    }
 
     if (farm) {
       setSelectedFarm(farm);
       setRequestId(request.id);
-      // Optional: pre-fill notes from request notes? 
-      // request.notes is from Manager. inspectionNotes is what Vendor writes.
-      // Maybe append Manager notes to inspection notes for context?
-      // Or just show them in UI.
       if (request.notes) {
         setInspectionNotes(`[Request Notes: ${request.notes}]\n`);
       }
-      setActiveTab('new');
-    } else {
-      console.error('Farm not found! farmId:', request.farmId, 'Available farms:', farmsData?.map(f => f.id));
-      Toast.show({ type: 'error', text1: 'Farm not found' });
+      setShowInspectionModal(true); // Open modal instead of changing tab
     }
+  };
+
+  const closeInspectionModal = () => {
+    setShowInspectionModal(false);
+    setRequestId(null);
+    setInspectionNotes('');
+    setSelectedFarm(null);
+    setPhotos([]);
+    setVideo(null);
+    setEstimatedBoxes('');
   };
 
   // ... (Permissions and Media functions remain matching original file) ...
@@ -346,8 +371,6 @@ export const InspectionsScreen: React.FC = () => {
   };
 
 
-
-  const [showCamera, setShowCamera] = useState(false);
 
   // Capture photo
   const capturePhoto = async () => {
@@ -449,34 +472,44 @@ export const InspectionsScreen: React.FC = () => {
   };
 
   const renderNewInspectionForm = () => (
-    <View style={styles.formCard}>
+    <>
       {/* Header with Close */}
       <View style={styles.formHeader}>
         <Text style={styles.sectionTitle}>Inspection Details</Text>
         <TouchableOpacity
-          onPress={() => {
-            setRequestId(null);
-            setInspectionNotes('');
-            setSelectedFarm(null);
-            setActiveTab('pending'); // Go back to pending
-          }}
+          onPress={closeInspectionModal}
           style={styles.closeButton}
         >
-          <Icon name="close" size={20} color={COLORS.text.muted} />
+          <Icon name="close" size={24} color={COLORS.text.muted} />
         </TouchableOpacity>
       </View>
 
       {/* Farm Info (Read Only) */}
       {selectedFarm && (
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmIcon}>
-            <Icon name="map-marker" size={24} color={COLORS.primary.main} />
+        <>
+          <View style={styles.farmInfoCard}>
+            <View style={styles.farmIcon}>
+              <Icon name="map-marker" size={24} color={COLORS.primary.main} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.farmNameLocked}>{selectedFarm.farmerName}</Text>
+              <Text style={styles.farmLocationLocked}>{selectedFarm.location}</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.farmNameLocked}>{selectedFarm.farmerName}</Text>
-            <Text style={styles.farmLocationLocked}>{selectedFarm.location}</Text>
-          </View>
-        </View>
+
+          {/* Item Info */}
+          {selectedFarm.produceType && (
+            <View style={styles.itemInfoCard}>
+              <View style={styles.farmIcon}>
+                <Icon name="leaf" size={24} color={COLORS.primary.main} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemLabel}>Item</Text>
+                <Text style={styles.itemValue}>{selectedFarm.produceType}</Text>
+              </View>
+            </View>
+          )}
+        </>
       )}
 
       {/* Inputs */}
@@ -495,7 +528,7 @@ export const InspectionsScreen: React.FC = () => {
           value={inspectionNotes}
           onChangeText={setInspectionNotes}
           multiline
-          numberOfLines={4}
+          numberOfLines={2}
           placeholder="Describe crop condition, readiness, etc..."
           icon={<Icon name="note-text" size={20} color={COLORS.text.muted} />}
         />
@@ -539,7 +572,7 @@ export const InspectionsScreen: React.FC = () => {
         style={styles.submitButton}
         icon={<Icon name="check" size={20} color="#000" />}
       />
-    </View>
+    </>
   );
 
 
@@ -577,30 +610,60 @@ export const InspectionsScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>To Do</Text>
             {toDoRequests.map((req: any) => {
               const urgencyColor = getUrgencyColor(req.createdAt);
+              const itemName = req.itemName || farmsData?.find((f: Farm) => f.id === req.farmId)?.produceType;
+
               return (
-                <View key={req.id} style={[styles.requestCard, { borderLeftWidth: 4, borderLeftColor: urgencyColor }]}>
-                  <View style={styles.requestHeader}>
-                    <View style={styles.farmInfo}>
-                      <Text style={styles.requestFarm}>{req.farmName}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                        <Icon name="clock-outline" size={14} color={urgencyColor} />
-                        <Text style={[styles.requestDate, { color: urgencyColor, marginLeft: 4 }]}>
-                          {new Date(req.createdAt).toLocaleDateString()}
-                        </Text>
+                <View key={req.id} style={[styles.compactRequestCard, { borderLeftWidth: 3, borderLeftColor: urgencyColor }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, marginRight: 12 }}
+                      onPress={() => {
+                        const farm = farmsData?.find((f: Farm) => f.id === req.farmId);
+                        if (farm) {
+                          Toast.show({
+                            type: 'info',
+                            text1: farm.farmerName,
+                            text2: `Item: ${farm.produceType || 'N/A'} • Location: ${farm.location}`,
+                            visibilityTime: 4000,
+                          });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.requestFarm, { fontSize: 15, marginBottom: 4 }]} numberOfLines={1}>{req.farmName}</Text>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Icon name="clock-outline" size={13} color={urgencyColor} />
+                          <Text style={{ fontSize: 13, color: urgencyColor, marginLeft: 4, fontWeight: '500' }}>
+                            {new Date(req.createdAt).toLocaleDateString()}
+                          </Text>
+                        </View>
+
+                        {itemName && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                            <Text style={{ fontSize: 10, color: '#334155', marginRight: 8 }}>•</Text>
+                            <Icon name="leaf" size={13} color={COLORS.primary.main} />
+                            <Text style={{ fontSize: 13, color: COLORS.primary.main, marginLeft: 4, fontWeight: '600' }}>
+                              {itemName}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    </View>
+                    </TouchableOpacity>
+
                     <GlassButton
                       title="Start"
                       onPress={() => handleStartRequest(req)}
                       variant="primary"
                       size="sm"
-                      style={styles.startBtn}
-                      textStyle={{ fontSize: 12 }}
+                      style={{ paddingHorizontal: 16, height: 36, minWidth: 80 }}
+                      textStyle={{ fontSize: 13, fontWeight: '600' }}
                     />
                   </View>
+
                   {req.notes && (
-                    <View style={styles.noteContainer}>
-                      <Text style={styles.requestNotes} numberOfLines={2}>"{req.notes}"</Text>
+                    <View style={{ marginTop: 8, padding: 8, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
+                      <Text style={{ color: '#94A3B8', fontSize: 12, fontStyle: 'italic' }} numberOfLines={1}>"{req.notes}"</Text>
                     </View>
                   )}
                 </View>
@@ -635,6 +698,12 @@ export const InspectionsScreen: React.FC = () => {
                   <Icon name="package-variant" size={14} color={COLORS.text.muted} />
                   <Text style={styles.detailText}>{ins.estimatedBoxes} boxes</Text>
                 </View>
+                {ins.itemName && (
+                  <View style={styles.detailItem}>
+                    <Icon name="leaf" size={14} color={COLORS.primary.main} />
+                    <Text style={[styles.detailText, { color: COLORS.primary.main }]}>{ins.itemName}</Text>
+                  </View>
+                )}
               </View>
               <TouchableOpacity
                 style={styles.reviewButton}
@@ -678,47 +747,64 @@ export const InspectionsScreen: React.FC = () => {
         ) : (
           filteredInspections.map((ins: any) => {
             const statusColor = ins.status === 'APPROVED' ? COLORS.status.success : COLORS.status.error;
+            const itemName = ins.itemName || farmsData?.find((f: Farm) => f.id === ins.farmId)?.produceType;
+
             return (
-              <View key={ins.id} style={[styles.inspectionCard, { borderLeftWidth: 4, borderLeftColor: statusColor }]}>
-                <View style={styles.inspectionHeader}>
-                  <Text style={styles.inspectionFarm}>{ins.farmName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                    <Text style={[styles.statusText, { color: statusColor }]}>{ins.status}</Text>
+              <TouchableOpacity
+                key={ins.id}
+                style={[styles.compactInspectionCard, { borderLeftWidth: 3, borderLeftColor: statusColor }]}
+                onPress={() => setInspectionToReview(ins)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={[styles.inspectionFarm, { fontSize: 15, marginBottom: 0, marginRight: 8 }]} numberOfLines={1}>
+                        {ins.farmName}
+                      </Text>
+                      <View style={[styles.statusBadge, { backgroundColor: statusColor + '15', paddingVertical: 1, paddingHorizontal: 6, borderRadius: 6 }]}>
+                        <Text style={[styles.statusText, { color: statusColor, fontSize: 9 }]}>{ins.status}</Text>
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <Text style={{ fontSize: 12, color: COLORS.text.muted }}>
+                        {new Date(ins.createdAt).toLocaleDateString()}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: '#334155' }}>•</Text>
+                      <Text style={{ fontSize: 12, color: COLORS.text.muted }}>
+                        {ins.estimatedBoxes} boxes
+                      </Text>
+
+                      {itemName && (
+                        <>
+                          <Text style={{ fontSize: 10, color: '#334155' }}>•</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Icon name="leaf" size={12} color={COLORS.primary.main} />
+                            <Text style={{ fontSize: 12, color: COLORS.primary.main, marginLeft: 2, fontWeight: '500' }}>
+                              {itemName}
+                            </Text>
+                          </View>
+                        </>
+                      )}
+                    </View>
+
+                    {isApprover && (
+                      <Text style={{ fontSize: 11, color: COLORS.text.muted, marginTop: 2 }}>
+                        Vendor: {ins.vendorName}
+                      </Text>
+                    )}
                   </View>
+
+                  <Icon name="chevron-right" size={20} color={COLORS.text.muted} />
                 </View>
-
-                <View style={styles.cardDetailsRow}>
-                  <View style={styles.detailItem}>
-                    <Icon name="calendar" size={14} color={COLORS.text.muted} />
-                    <Text style={styles.detailText}>{new Date(ins.createdAt).toLocaleDateString()}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Icon name="package-variant" size={14} color={COLORS.text.muted} />
-                    <Text style={styles.detailText}>{ins.estimatedBoxes} boxes</Text>
-                  </View>
-                </View>
-
-                {isApprover && (
-                  <Text style={[styles.detailText, { marginTop: 4 }]}>Vendor: {ins.vendorName}</Text>
-                )}
-
-                <TouchableOpacity
-                  style={styles.reviewButton}
-                  onPress={() => setInspectionToReview(ins)}
-                >
-                  <Text style={styles.reviewButtonText}>View Details</Text>
-                  <Icon name="chevron-right" size={20} color={COLORS.primary.main} />
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
       </View >
     );
   };
-
-  // Modal state for reviewing inspection details
-  const [inspectionToReview, setInspectionToReview] = useState<any | null>(null);
 
   /* New Approval List Rendering */
   const renderApprovalsList = () => {
@@ -812,16 +898,12 @@ export const InspectionsScreen: React.FC = () => {
       {
         !(activeTab === 'new' && requestId) && (
           <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-            <View style={styles.searchInputContainer}>
-              <Icon name="magnify" size={22} color={THEME.colors.input.placeholder} style={{ marginRight: 10 }} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search inspections..."
-                placeholderTextColor={THEME.colors.input.placeholder}
-                style={styles.searchInput}
-              />
-            </View>
+            <GlassSearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search inspections..."
+              placeholderTextColor={THEME.colors.input.placeholder}
+            />
           </View>
         )
       }
@@ -850,13 +932,9 @@ export const InspectionsScreen: React.FC = () => {
           />
         }
       >
-        {/* Submit Form */}
-        {requestId ? renderNewInspectionForm() : (
-          <>
-            {activeTab === 'pending' && (isApprover ? renderApprovalsList() : renderPendingTab())}
-            {activeTab === 'history' && renderHistoryTab()}
-          </>
-        )}
+        {/* Content based on active tab */}
+        {activeTab === 'pending' && (isApprover ? renderApprovalsList() : renderPendingTab())}
+        {activeTab === 'history' && renderHistoryTab()}
       </ScrollView>
 
       {/* Review Modal */}
@@ -879,22 +957,37 @@ export const InspectionsScreen: React.FC = () => {
               <Text style={styles.detailLabel}>Farm</Text>
               <Text style={styles.detailValue}>{inspectionToReview?.farmName}</Text>
 
-              <Text style={styles.detailLabel}>Produce Type</Text>
+              {/* <Text style={styles.detailLabel}>Produce Type</Text>
               <Text style={styles.detailValue}>
                 {farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || 'N/A'}
-              </Text>
+              </Text> */}
 
               <Text style={styles.detailLabel}>Vendor</Text>
               <Text style={styles.detailValue}>{inspectionToReview?.vendorName}</Text>
 
-              <View style={{ flexDirection: 'row', gap: 20 }}>
-                <View>
+              <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Item</Text>
+                  <Text style={styles.detailValue}>
+                    {farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || inspectionToReview?.itemName || 'N/A'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Est. Boxes</Text>
                   <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
                 </View>
-                <View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 20 }}>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Date</Text>
                   <Text style={styles.detailValue}>{new Date(inspectionToReview?.createdAt).toLocaleDateString()}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Status</Text>
+                  <Text style={[styles.detailValue, { color: inspectionToReview?.status === 'APPROVED' ? COLORS.status.success : inspectionToReview?.status === 'REJECTED' ? COLORS.status.error : '#F59E0B' }]}>
+                    {inspectionToReview?.status || 'PENDING'}
+                  </Text>
                 </View>
               </View>
 
@@ -951,6 +1044,25 @@ export const InspectionsScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
               )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Inspection Form Modal */}
+      <Modal
+        visible={showInspectionModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={closeInspectionModal}
+      >
+        <View style={styles.inspectionModalOverlay}>
+          <View style={styles.inspectionModalContent}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ padding: 20 }}
+            >
+              {renderNewInspectionForm()}
             </ScrollView>
           </View>
         </View>
@@ -1055,6 +1167,23 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
     marginBottom: 16,
   },
+  compactInspectionCard: {
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 8,
+  },
+
+  compactRequestCard: {
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 8,
+  },
 
   // Search
   searchInputContainer: {
@@ -1112,6 +1241,32 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.10)',
     alignSelf: 'flex-start',
   },
+
+  // Item Info Card
+  itemInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  itemLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  itemValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary.main,
+  },
+
   reviewButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
@@ -1126,12 +1281,11 @@ const styles = StyleSheet.create({
 
   // Form
   formCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: '#0F172A', // Solid background instead of transparent
     borderRadius: 18,
     padding: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 20,
   },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   closeButton: { padding: 4 },
@@ -1201,4 +1355,27 @@ const styles = StyleSheet.create({
   farmName: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
   dateText: { fontSize: 12, color: '#64748B' },
   mediaScroll: { marginVertical: 16 },
+
+  // Inspection Modal Styles
+  inspectionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)', // More opaque overlay
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  inspectionModalContent: {
+    width: '92%', // Reduced from 100%
+    maxWidth: 500, // Reduced from 600
+    maxHeight: '85%', // Reduced from 90%
+    backgroundColor: '#0F172A', // Solid dark background
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 10,
+  },
 });

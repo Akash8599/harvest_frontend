@@ -10,6 +10,7 @@ import {
   ScrollView,
   Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,6 +22,7 @@ import Toast from 'react-native-toast-message';
 import { GlassCard } from '../../components/glassmorphism/GlassCard';
 import { GlassButton } from '../../components/glassmorphism/GlassButton';
 import { GlassInput } from '../../components/glassmorphism/GlassInput';
+import { GlassSearchBar } from '../../components/glassmorphism/GlassSearchBar';
 import { BatchStatusBadge } from '../../components/common/BatchStatusBadge';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi, harvestApi } from '../../services/api';
@@ -259,12 +261,10 @@ export const HarvestScreen: React.FC = () => {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Select Active Batch</Text>
           <View style={styles.searchWrapper}>
-            <GlassInput
-              placeholder="Search farm or batch..."
+            <GlassSearchBar
               value={searchQuery}
               onChangeText={setSearchQuery}
-              containerStyle={styles.searchBar}
-              icon={<Icon name="magnify" size={20} color={COLORS.text.muted} />}
+              placeholder="Search farm or batch..."
             />
           </View>
         </View>
@@ -688,5 +688,21 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
     fontSize: TYPOGRAPHY.sizes.md,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.sizes.md,
+    color: COLORS.text.primary,
+    paddingVertical: SPACING.md,
   },
 });
