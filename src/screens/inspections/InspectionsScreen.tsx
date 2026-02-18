@@ -610,7 +610,9 @@ export const InspectionsScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>To Do</Text>
             {toDoRequests.map((req: any) => {
               const urgencyColor = getUrgencyColor(req.createdAt);
-              const itemName = req.itemName || farmsData?.find((f: Farm) => f.id === req.farmId)?.produceType;
+              const farmData = farmsData?.find((f: Farm) => f.id === req.farmId);
+              const itemName = req.itemName || farmData?.produceType;
+              const farmLocation = req.farmLocation || farmData?.location || 'N/A';
 
               return (
                 <View key={req.id} style={[styles.compactRequestCard, { borderLeftWidth: 3, borderLeftColor: urgencyColor }]}>
@@ -629,7 +631,9 @@ export const InspectionsScreen: React.FC = () => {
                         }
                       }}
                     >
-                      <Text style={[styles.requestFarm, { fontSize: 15, marginBottom: 4 }]} numberOfLines={1}>{req.farmName}</Text>
+                      <Text style={[styles.requestFarm, { fontSize: 15, marginBottom: 4 }]} numberOfLines={1}>
+                        {req.farmName} <Text style={{ fontSize: 13, color: COLORS.text.muted, fontWeight: 'normal' }}>({farmLocation})</Text>
+                      </Text>
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -684,7 +688,10 @@ export const InspectionsScreen: React.FC = () => {
           inReviewInspections.map((ins: any) => (
             <View key={ins.id} style={[styles.inspectionCard, { borderLeftWidth: 4, borderLeftColor: '#F59E0B' }]}>
               <View style={styles.inspectionHeader}>
-                <Text style={styles.inspectionFarm}>{ins.farmName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inspectionFarm}>{ins.farmName}</Text>
+                  <Text style={{ fontSize: 12, color: COLORS.text.muted }}>{ins.farmLocation}</Text>
+                </View>
                 <View style={[styles.statusBadge, { backgroundColor: '#F59E0B' + '20' }]}>
                   <Text style={[styles.statusText, { color: '#F59E0B' }]}>PENDING</Text>
                 </View>
@@ -760,7 +767,7 @@ export const InspectionsScreen: React.FC = () => {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                       <Text style={[styles.inspectionFarm, { fontSize: 15, marginBottom: 0, marginRight: 8 }]} numberOfLines={1}>
-                        {ins.farmName}
+                        {ins.farmName} <Text style={{ fontSize: 12, color: COLORS.text.muted, fontWeight: 'normal' }}>({ins.farmLocation})</Text>
                       </Text>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor + '15', paddingVertical: 1, paddingHorizontal: 6, borderRadius: 6 }]}>
                         <Text style={[styles.statusText, { color: statusColor, fontSize: 9 }]}>{ins.status}</Text>
@@ -829,13 +836,25 @@ export const InspectionsScreen: React.FC = () => {
           filteredApprovals.map((item: any) => (
             <GlassCard key={item.id} style={styles.inspectionCard}>
               <View style={styles.cardHeader}>
-                <Text style={styles.farmName}>{item.farmName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.farmName}>{item.farmName}</Text>
+                  <Text style={{ fontSize: 12, color: COLORS.text.muted }}>{item.farmLocation}</Text>
+                </View>
                 <View style={[styles.statusBadge, { backgroundColor: COLORS.status.warning + '20' }]}>
                   <Text style={[styles.statusText, { color: COLORS.status.warning }]}>PENDING</Text>
                 </View>
               </View>
               <Text style={styles.detailText}>Vendor: {item.vendorName}</Text>
-              <Text style={styles.detailText}>Boxes: {item.estimatedBoxes}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.detailText}>Boxes: {item.estimatedBoxes}</Text>
+                {item.itemName && (
+                  <>
+                    <Text style={{ color: COLORS.text.muted }}>•</Text>
+                    <Icon name="leaf" size={14} color={COLORS.primary.main} />
+                    <Text style={[styles.detailText, { color: COLORS.primary.main }]}>{item.itemName}</Text>
+                  </>
+                )}
+              </View>
               <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
 
               <TouchableOpacity
@@ -955,7 +974,9 @@ export const InspectionsScreen: React.FC = () => {
 
             <ScrollView style={styles.modalScroll}>
               <Text style={styles.detailLabel}>Farm</Text>
-              <Text style={styles.detailValue}>{inspectionToReview?.farmName}</Text>
+              <Text style={styles.detailValue}>
+                {inspectionToReview?.farmName} ({inspectionToReview?.farmLocation || farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.location || 'N/A'})
+              </Text>
 
               {/* <Text style={styles.detailLabel}>Produce Type</Text>
               <Text style={styles.detailValue}>
@@ -969,7 +990,7 @@ export const InspectionsScreen: React.FC = () => {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Item</Text>
                   <Text style={styles.detailValue}>
-                    {farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || inspectionToReview?.itemName || 'N/A'}
+                    {inspectionToReview?.itemName || farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || 'N/A'}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>

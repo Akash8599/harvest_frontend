@@ -105,6 +105,7 @@ export interface FarmInspection {
   requestId?: string;
   farmId: string;
   farmName: string;
+  itemName: string;
   farmLocation: string;
   vendorId: string;
   vendorName: string;
