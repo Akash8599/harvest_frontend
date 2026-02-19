@@ -146,6 +146,8 @@ export enum BatchStatus {
   HARVEST_COMPLETED = 'HARVEST_COMPLETED',
   DISPATCH_IN_PROGRESS = 'DISPATCH_IN_PROGRESS',
   DISPATCH_COMPLETED = 'DISPATCH_COMPLETED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED',
 }
 
@@ -155,6 +157,7 @@ export interface Batch {
   inspectionId?: string;
   farmId?: string;
   farmName?: string;
+  farmLocation?: string;
   vendorId?: string;
   vendorName?: string;
   produceType?: string; // Derived from Farm

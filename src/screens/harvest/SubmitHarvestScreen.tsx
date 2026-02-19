@@ -56,8 +56,10 @@ export const SubmitHarvestScreen: React.FC = () => {
                 text2: 'Harvest report submitted successfully',
             });
             queryClient.invalidateQueries({ queryKey: ['todayReports'] });
+            queryClient.invalidateQueries({ queryKey: ['batch', batch.id] });
             queryClient.invalidateQueries({ queryKey: ['batchDetails', batch.id] });
             queryClient.invalidateQueries({ queryKey: ['activeBatches'] });
+            queryClient.invalidateQueries({ queryKey: ['batchHarvest', batch.id] });
             navigation.goBack();
         },
         onError: (error: any) => {

@@ -43,7 +43,7 @@ export const GlassInput: React.FC<GlassInputProps> = ({
       <View style={[
         styles.inputContainer,
         isFocused && styles.inputContainerFocused,
-        error && styles.inputContainerError,
+        !isFocused && error && styles.inputContainerError,
       ]}>
         {icon && (
           <View style={styles.iconContainer}>
@@ -101,14 +101,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.glass.border,
     paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   inputContainerFocused: {
-    borderColor: COLORS.primary.main,
-    shadowColor: COLORS.primary.main,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: '#22C55E',
+    borderWidth: 2,
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
   },
   inputContainerError: {
     borderColor: COLORS.status.error,
@@ -120,7 +118,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: TYPOGRAPHY.sizes.md,
     color: COLORS.text.primary,
-    paddingVertical: SPACING.md,
   },
   eyeIcon: {
     padding: SPACING.xs,

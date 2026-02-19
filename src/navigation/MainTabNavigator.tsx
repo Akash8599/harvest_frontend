@@ -223,7 +223,10 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
     // Gate Pass: Show pending dispatch batches for everyone
     if (tabName === 'GatePass') {
       count = batches.filter((b: Batch) =>
-        b.status !== BatchStatus.DISPATCH_COMPLETED && b.status !== BatchStatus.CANCELLED
+        b.status !== BatchStatus.DISPATCH_COMPLETED && 
+        b.status !== BatchStatus.IN_TRANSIT && 
+        b.status !== BatchStatus.DELIVERED && 
+        b.status !== BatchStatus.CANCELLED
       ).length;
     }
 

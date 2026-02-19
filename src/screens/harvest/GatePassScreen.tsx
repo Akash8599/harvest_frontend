@@ -81,13 +81,17 @@ export const GatePassScreen: React.FC = () => {
     const selectableBatches = React.useMemo(() => {
         return batches.filter((b: Batch) =>
             b.status !== 'DISPATCH_COMPLETED' &&
+            b.status !== 'IN_TRANSIT' &&
+            b.status !== 'DELIVERED' &&
             b.status !== 'CANCELLED'
         );
     }, [batches]);
 
     const filteredBatches = selectableBatches.filter((b: Batch) =>
-        b.farmName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.batchId?.toLowerCase().includes(searchQuery.toLowerCase())
+        (b.farmName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.batchId?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+        b.status !== 'IN_TRANSIT' &&
+        b.status !== 'DELIVERED'
     );
 
     const { data: batchDetails, isLoading: detailsLoading } = useQuery({

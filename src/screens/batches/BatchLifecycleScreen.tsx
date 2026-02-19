@@ -149,6 +149,52 @@ export const BatchLifecycleScreen: React.FC = () => {
         );
     };
 
+    const handleMarkInTransit = () => {
+        Alert.alert(
+            "Mark In Transit?",
+            "Are you sure this batch is now in transit?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Yes, In Transit",
+                    onPress: async () => {
+                        try {
+                            await farmApi.updateBatchStatus(activeBatch.id, 'IN_TRANSIT');
+                            Toast.show({ type: 'success', text1: 'Batch Marked as In Transit' });
+                            queryClient.invalidateQueries({ queryKey: ['batch', batch?.id] });
+                            queryClient.invalidateQueries({ queryKey: ['activeBatches'] });
+                        } catch (error) {
+                            Toast.show({ type: 'error', text1: 'Failed to update status' });
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleMarkDelivered = () => {
+        Alert.alert(
+            "Mark as Delivered?",
+            "Confirm that this batch has been delivered?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Yes, Delivered",
+                    onPress: async () => {
+                        try {
+                            await farmApi.updateBatchStatus(activeBatch.id, 'DELIVERED');
+                            Toast.show({ type: 'success', text1: 'Batch Marked as Delivered' });
+                            queryClient.invalidateQueries({ queryKey: ['batch', batch?.id] });
+                            queryClient.invalidateQueries({ queryKey: ['activeBatches'] });
+                        } catch (error) {
+                            Toast.show({ type: 'error', text1: 'Failed to update status' });
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     // --- Timeline Renderer ---
 
     const renderTimelineStep = (
@@ -208,6 +254,16 @@ export const BatchLifecycleScreen: React.FC = () => {
         return (
             <View>
                 <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Farm</Text>
+                    <Text style={styles.detailValue}>{activeBatch.farmName}</Text>
+                </View>
+                {activeBatch.farmLocation && (
+                    <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Location</Text>
+                        <Text style={styles.detailValue}>📍 {activeBatch.farmLocation}</Text>
+                    </View>
+                )}
+                <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Inspector</Text>
                     <Text style={styles.detailValue}>{inspector}</Text>
                 </View>
@@ -237,6 +293,7 @@ export const BatchLifecycleScreen: React.FC = () => {
 
     // Harvest Data
     const totalHarvested = harvestReports?.reduce((acc: number, curr: any) => acc + (curr.boxesPacked || 0), 0) || 0;
+    const totalWasted = harvestReports?.reduce((acc: number, curr: any) => acc + (curr.boxesWasted || 0), 0) || 0;
     const estimated = activeBatch.estimatedBoxes || 0;
     const progress = estimated > 0 ? (totalHarvested / estimated) : 0;
     const percent = Math.min(progress * 100, 100).toFixed(0);
@@ -264,18 +321,41 @@ export const BatchLifecycleScreen: React.FC = () => {
                     <Text style={styles.statLab}>Estimated</Text>
                 </View>
                 <View style={styles.statItem}>
+                    <Text style={[styles.statVal, { color: COLORS.status.error }]}>{totalWasted}</Text>
+                    <Text style={styles.statLab}>Wasted</Text>
+                </View>
+            </View>
+
+            <View style={[styles.statsGrid, { marginTop: SPACING.sm }]}>
+                <View style={styles.statItem}>
                     <Text style={styles.statVal}>{Math.max(0, estimated - totalHarvested)}</Text>
                     <Text style={styles.statLab}>Remaining</Text>
+                </View>
+                <View style={styles.statItem}>
+                    <Text style={styles.statVal}>{harvestReports?.length || 0}</Text>
+                    <Text style={styles.statLab}>Reports</Text>
                 </View>
             </View>
 
             {/* Recent Reports List (Preview) */}
             <View style={{ marginTop: SPACING.md }}>
-                <Text style={styles.subSectionTitle}>Recent Reports</Text>
-                {harvestReports?.map((report: any, index: number) => (
+                <Text style={styles.subSectionTitle}>Recent Harvest Reports</Text>
+                {harvestReports?.slice(0, 5).map((report: any, index: number) => (
                     <View key={index} style={styles.miniListRow}>
-                        <Text style={styles.miniListText}>{new Date(report.createdAt).toLocaleDateString()}</Text>
-                        <Text style={[styles.miniListText, { fontWeight: 'bold' }]}>{report.boxesPacked} Boxes</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.miniListText}>{new Date(report.createdAt).toLocaleDateString()}</Text>
+                            <Text style={[styles.miniListText, { fontSize: 10, color: COLORS.text.muted }]}>
+                                {report.laborCount || 0} Labor
+                            </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.miniListText, { fontWeight: 'bold' }]}>{report.boxesPacked} Boxes</Text>
+                            {report.boxesWasted > 0 && (
+                                <Text style={[styles.miniListText, { fontSize: 10, color: COLORS.status.error }]}>
+                                    {report.boxesWasted} Wasted
+                                </Text>
+                            )}
+                        </View>
                     </View>
                 ))}
                 {(!harvestReports || harvestReports.length === 0) && <Text style={styles.emptyText}>No harvest reports yet.</Text>}
@@ -345,6 +425,59 @@ export const BatchLifecycleScreen: React.FC = () => {
         </View>
     );
 
+    // In Transit Full Content
+    const inTransitFullContent = (
+        <View>
+            <View style={{ marginTop: SPACING.xs }}>
+                <Text style={[styles.subSectionTitle, { marginBottom: SPACING.md }]}>Shipment Details</Text>
+                
+                {/* Summary Stats */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statVal}>{gatePasses?.length || 0}</Text>
+                        <Text style={styles.statLab}>Gate Passes</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statVal}>{totalDispatched}</Text>
+                        <Text style={styles.statLab}>Boxes Shipped</Text>
+                    </View>
+                </View>
+
+                {/* Vehicle Details */}
+                {gatePasses && gatePasses.length > 0 && (
+                    <View style={{ marginTop: SPACING.md }}>
+                        {gatePasses.map((gp: any, index: number) => (
+                            <GlassCard key={index} style={{ marginBottom: SPACING.sm, padding: SPACING.md, backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm }}>
+                                    <Text style={{ color: COLORS.text.primary, fontWeight: 'bold' }}>Vehicle #{index + 1}</Text>
+                                    <Text style={{ color: COLORS.primary.main, fontWeight: 'bold' }}>{gp.totalBoxes} Boxes</Text>
+                                </View>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Truck Number</Text>
+                                    <Text style={styles.detailValue}>{gp.truckNumber || 'N/A'}</Text>
+                                </View>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Driver Name</Text>
+                                    <Text style={styles.detailValue}>{gp.driverName || 'N/A'}</Text>
+                                </View>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Driver Phone</Text>
+                                    <Text style={styles.detailValue}>{gp.driverPhone || 'N/A'}</Text>
+                                </View>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Dispatch Date</Text>
+                                    <Text style={styles.detailValue}>{new Date(gp.dispatchDate || gp.createdAt).toLocaleDateString()}</Text>
+                                </View>
+                            </GlassCard>
+                        ))}
+                    </View>
+                )}
+                
+                {(!gatePasses || gatePasses.length === 0) && <Text style={styles.emptyText}>No shipment details available.</Text>}
+            </View>
+        </View>
+    );
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Sticky/Fixed Header */}
@@ -365,6 +498,11 @@ export const BatchLifecycleScreen: React.FC = () => {
                     <View style={styles.infoTop}>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.farmName}>{activeBatch.farmName}</Text>
+                            {activeBatch.farmLocation && (
+                                <Text style={[styles.batchCode, { color: COLORS.text.muted }]}>
+                                    📍 {activeBatch.farmLocation}
+                                </Text>
+                            )}
                             <Text style={styles.batchCode}>Batch #{activeBatch.batchId}</Text>
                         </View>
                         <View style={{ alignItems: 'center' }}>
@@ -390,6 +528,12 @@ export const BatchLifecycleScreen: React.FC = () => {
                             <Icon name="package-variant-closed" size={16} color={COLORS.text.muted} />
                             <Text style={styles.infoStatText}>{activeBatch.estimatedBoxes} Est. Boxes</Text>
                         </View>
+                        {activeBatch.farmLocation && (
+                            <View style={styles.infoStatItem}>
+                                <Icon name="map-marker" size={16} color={COLORS.text.muted} />
+                                <Text style={styles.infoStatText}>{activeBatch.farmLocation}</Text>
+                            </View>
+                        )}
                     </View>
                 </GlassCard>
 
@@ -411,8 +555,8 @@ export const BatchLifecycleScreen: React.FC = () => {
                     {renderTimelineStep(
                         'Harvesting',
                         'basket',
-                        activeBatch.status === BatchStatus.HARVEST_COMPLETED ? 'Completed' : 'In Progress',
-                        activeBatch.status === BatchStatus.HARVEST_COMPLETED ? COLORS.status.success : COLORS.status.warning,
+                        activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'In Progress',
+                        activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.warning,
                         undefined,
                         (
                             <View>
@@ -421,19 +565,21 @@ export const BatchLifecycleScreen: React.FC = () => {
                                     <Text style={{ fontSize: 12, color: COLORS.text.muted, marginLeft: 4 }}>/ {estimated} Allocated</Text>
                                 </View>
                                 <View style={styles.progressBarBg}>
-                                    <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: activeBatch.status === BatchStatus.HARVEST_COMPLETED ? COLORS.status.success : COLORS.status.warning }]} />
+                                    <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS ? COLORS.status.success : COLORS.status.warning }]} />
                                 </View>
                             </View>
                         ),
                         harvestFullContent
                     )}
 
-                    {/* Step 3: Dispatch */}
+                    {/* Step 3: Dispatch - Show only when harvest is completed */}
+                    {(activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
+                    <View>
                     {renderTimelineStep(
                         'Dispatch',
                         'truck-delivery',
-                        activeBatch.status === BatchStatus.DISPATCH_COMPLETED ? 'Completed' : 'Pending',
-                        COLORS.status.info,
+                        activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'Pending',
+                        activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.info,
                         undefined,
                         (
                             <View>
@@ -449,7 +595,42 @@ export const BatchLifecycleScreen: React.FC = () => {
                             </View>
                         ),
                         dispatchFullContent,
+                        false // isLast
+                    )}
+                    </View>
+                    )}
+
+                    {/* Step 4: In Transit - Show only when dispatch is in progress or completed */}
+                    {(activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
+                    <View>
+                    {renderTimelineStep(
+                        'In Transit',
+                        'truck',
+                        activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'In Transit' : 'Pending',
+                        activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.warning : COLORS.status.muted,
+                        undefined,
+                        (
+                            <View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Icon name="ticket" size={14} color={COLORS.text.secondary} />
+                                        <Text style={[styles.detailText, { marginLeft: 4 }]}>
+                                            {gatePasses?.length || 0} Gate Passes
+                                        </Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Icon name="package-variant" size={14} color={COLORS.text.secondary} />
+                                        <Text style={[styles.detailText, { marginLeft: 4 }]}>
+                                            {totalDispatched} Boxes
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                        ),
+                        inTransitFullContent,
                         true // isLast
+                    )}
+                    </View>
                     )}
 
                 </View>
@@ -466,6 +647,18 @@ export const BatchLifecycleScreen: React.FC = () => {
                         <Text style={{ textAlign: 'center', color: COLORS.text.muted, marginTop: SPACING.sm, fontSize: 12 }}>
                             This will lock the batch from further harvest reports.
                         </Text>
+                    </View>
+                )}
+
+                {/* Action Button for Delivered */}
+                {activeBatch.status === BatchStatus.IN_TRANSIT && (
+                    <View style={{ marginTop: SPACING.md, marginBottom: SPACING.xl }}>
+                        <GlassButton
+                            title="Mark Delivered"
+                            onPress={handleMarkDelivered}
+                            icon={<Icon name="check-decagram" size={24} color={COLORS.text.primary} />}
+                            style={{ backgroundColor: COLORS.status.success }}
+                        />
                     </View>
                 )}
 

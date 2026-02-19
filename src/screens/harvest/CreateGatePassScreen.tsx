@@ -47,8 +47,8 @@ export const CreateGatePassScreen: React.FC = () => {
                 text2: 'Gate pass created successfully',
             });
             queryClient.invalidateQueries({ queryKey: ['todayGatePasses'] });
+            queryClient.invalidateQueries({ queryKey: ['batchGatePasses', batch.id] });
             queryClient.invalidateQueries({ queryKey: ['batchDetailsGP', batch.id] });
-            queryClient.invalidateQueries({ queryKey: ['activeBatchesForGP'] });
             queryClient.invalidateQueries({ queryKey: ['activeBatchesForGP'] });
             navigation.navigate('GatePass', { refresh: true });
         },

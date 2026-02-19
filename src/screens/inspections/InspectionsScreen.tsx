@@ -94,6 +94,9 @@ export const InspectionsScreen: React.FC = () => {
   // Auto-refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      // Always refetch farms to get latest data
+      queryClient.invalidateQueries({ queryKey: ['farms'] });
+      
       // Invalidate queries to trigger background refetch and update badges
       if (isVendor) {
         queryClient.invalidateQueries({ queryKey: ['myInspections'] });
@@ -103,8 +106,6 @@ export const InspectionsScreen: React.FC = () => {
         queryClient.invalidateQueries({ queryKey: ['allInspections'] });
         queryClient.invalidateQueries({ queryKey: ['pendingInspections'] });
       }
-      // Also refresh farms as they might have changed status
-      queryClient.invalidateQueries({ queryKey: ['farms'] });
     }, [isVendor, isApprover, queryClient])
   );
 
@@ -129,6 +130,11 @@ export const InspectionsScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   // GPS Removed as per user request
 
+  // Helper function to get farm details by ID
+  const getFarmById = (farmId: string): Farm | undefined => {
+    return farmsData?.find((f: Farm) => f.id === farmId);
+  };
+
   // ... (Removed getCurrentLocation logic)
 
   // Fetch farms
@@ -138,6 +144,8 @@ export const InspectionsScreen: React.FC = () => {
       const response = await farmApi.getAllFarms();
       return response.data.data;
     },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Fetch my inspections
@@ -201,6 +209,8 @@ export const InspectionsScreen: React.FC = () => {
         text1: 'Inspection Submitted',
         text2: 'Your inspection has been sent for approval.',
       });
+      // Close modal
+      setShowInspectionModal(false);
       // Reset form
       setRequestId(null);
       setSelectedFarm(null);
@@ -286,7 +296,7 @@ export const InspectionsScreen: React.FC = () => {
     if (isLoadingFarmDetails) return;
 
     // 1. Try to find in loaded farms first
-    let farm = farmsData?.find((f: Farm) => f.id === request.farmId);
+    let farm = request.farmId ? getFarmById(request.farmId) : null;
 
     // 2. If not found locally, fetch from API
     if (!farm) {
@@ -563,15 +573,31 @@ export const InspectionsScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      <GlassButton
-        title="Submit Inspection"
+      <TouchableOpacity
         onPress={submitInspection}
-        loading={createInspectionMutation.isPending}
-        variant="primary"
-        size="lg"
-        style={styles.submitButton}
-        icon={<Icon name="check" size={20} color="#000" />}
-      />
+        disabled={createInspectionMutation.isPending}
+        style={{
+          marginTop: 16,
+          borderRadius: 16,
+          backgroundColor: 'rgba(34, 197, 94, 0.15)',
+          borderWidth: 1,
+          borderColor: 'rgba(34, 197, 94, 0.35)',
+          paddingVertical: 16,
+          paddingHorizontal: 24,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {createInspectionMutation.isPending ? (
+          <ActivityIndicator size="small" color="#22C55E" />
+        ) : (
+          <>
+            <Icon name="check" size={20} color="#22C55E" style={{ marginRight: 8 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#22C55E' }}>Submit Inspection</Text>
+          </>
+        )}
+      </TouchableOpacity>
     </>
   );
 
@@ -610,7 +636,7 @@ export const InspectionsScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>To Do</Text>
             {toDoRequests.map((req: any) => {
               const urgencyColor = getUrgencyColor(req.createdAt);
-              const farmData = farmsData?.find((f: Farm) => f.id === req.farmId);
+              const farmData = req.farmId ? getFarmById(req.farmId) : null;
               const itemName = req.itemName || farmData?.produceType;
               const farmLocation = req.farmLocation || farmData?.location || 'N/A';
 
@@ -620,7 +646,7 @@ export const InspectionsScreen: React.FC = () => {
                     <TouchableOpacity
                       style={{ flex: 1, marginRight: 12 }}
                       onPress={() => {
-                        const farm = farmsData?.find((f: Farm) => f.id === req.farmId);
+                        const farm = req.farmId ? getFarmById(req.farmId) : null;
                         if (farm) {
                           Toast.show({
                             type: 'info',
@@ -655,14 +681,22 @@ export const InspectionsScreen: React.FC = () => {
                       </View>
                     </TouchableOpacity>
 
-                    <GlassButton
-                      title="Start"
+                    <TouchableOpacity
                       onPress={() => handleStartRequest(req)}
-                      variant="primary"
-                      size="sm"
-                      style={{ paddingHorizontal: 16, height: 36, minWidth: 80 }}
-                      textStyle={{ fontSize: 13, fontWeight: '600' }}
-                    />
+                      style={{
+                        paddingHorizontal: 16,
+                        height: 36,
+                        minWidth: 80,
+                        borderRadius: 18,
+                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                        borderWidth: 1,
+                        borderColor: 'rgba(34, 197, 94, 0.35)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#22C55E' }}>Start</Text>
+                    </TouchableOpacity>
                   </View>
 
                   {req.notes && (
@@ -754,7 +788,9 @@ export const InspectionsScreen: React.FC = () => {
         ) : (
           filteredInspections.map((ins: any) => {
             const statusColor = ins.status === 'APPROVED' ? COLORS.status.success : COLORS.status.error;
-            const itemName = ins.itemName || farmsData?.find((f: Farm) => f.id === ins.farmId)?.produceType;
+            const farm = ins.farmId ? getFarmById(ins.farmId) : null;
+            const itemName = ins.itemName || farm?.produceType;
+            const farmLocation = ins.farmLocation || farm?.location;
 
             return (
               <TouchableOpacity
@@ -767,7 +803,7 @@ export const InspectionsScreen: React.FC = () => {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                       <Text style={[styles.inspectionFarm, { fontSize: 15, marginBottom: 0, marginRight: 8 }]} numberOfLines={1}>
-                        {ins.farmName} <Text style={{ fontSize: 12, color: COLORS.text.muted, fontWeight: 'normal' }}>({ins.farmLocation})</Text>
+                        {ins.farmName} <Text style={{ fontSize: 12, color: COLORS.text.muted, fontWeight: 'normal' }}>({farmLocation || 'N/A'})</Text>
                       </Text>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor + '15', paddingVertical: 1, paddingHorizontal: 6, borderRadius: 6 }]}>
                         <Text style={[styles.statusText, { color: statusColor, fontSize: 9 }]}>{ins.status}</Text>
@@ -896,6 +932,12 @@ export const InspectionsScreen: React.FC = () => {
   );
 
   return (
+    <LinearGradient
+      colors={['#0F5132', '#0F2027', '#0A0F1C']}
+      style={styles.container}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+    >
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -973,31 +1015,34 @@ export const InspectionsScreen: React.FC = () => {
             </View>
 
             <ScrollView style={styles.modalScroll}>
-              <Text style={styles.detailLabel}>Farm</Text>
-              <Text style={styles.detailValue}>
-                {inspectionToReview?.farmName} ({inspectionToReview?.farmLocation || farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.location || 'N/A'})
-              </Text>
+              {(() => {
+                const farm = inspectionToReview?.farmId ? getFarmById(inspectionToReview.farmId) : null;
+                const farmLocation = inspectionToReview?.farmLocation || farm?.location || 'N/A';
+                const itemName = inspectionToReview?.itemName || farm?.produceType || 'N/A';
+                
+                return (
+                  <>
+                    <Text style={styles.detailLabel}>Farm</Text>
+                    <Text style={styles.detailValue}>
+                      {inspectionToReview?.farmName} ({farmLocation})
+                    </Text>
 
-              {/* <Text style={styles.detailLabel}>Produce Type</Text>
-              <Text style={styles.detailValue}>
-                {farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || 'N/A'}
-              </Text> */}
+                    <Text style={styles.detailLabel}>Vendor</Text>
+                    <Text style={styles.detailValue}>{inspectionToReview?.vendorName}</Text>
 
-              <Text style={styles.detailLabel}>Vendor</Text>
-              <Text style={styles.detailValue}>{inspectionToReview?.vendorName}</Text>
-
-              <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.detailLabel}>Item</Text>
-                  <Text style={styles.detailValue}>
-                    {inspectionToReview?.itemName || farmsData?.find((f: any) => f.id === inspectionToReview?.farmId)?.produceType || 'N/A'}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.detailLabel}>Est. Boxes</Text>
-                  <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
-                </View>
-              </View>
+                    <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.detailLabel}>Item</Text>
+                        <Text style={styles.detailValue}>{itemName}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.detailLabel}>Est. Boxes</Text>
+                        <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
+                      </View>
+                    </View>
+                  </>
+                );
+              })()}
 
               <View style={{ flexDirection: 'row', gap: 20 }}>
                 <View style={{ flex: 1 }}>
@@ -1101,6 +1146,7 @@ export const InspectionsScreen: React.FC = () => {
         />
       </Modal>
     </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -1108,7 +1154,6 @@ export const InspectionsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.dark, // Solid background like Harvest
   },
   header: {
     flexDirection: 'row',
@@ -1241,12 +1286,13 @@ const styles = StyleSheet.create({
 
   // Badges
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderWidth: 1,
     borderColor: 'rgba(34, 197, 94, 0.25)',
+    alignSelf: 'flex-start',
   },
   statusText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: '#22C55E' },
 

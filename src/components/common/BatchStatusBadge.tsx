@@ -52,6 +52,12 @@ const getStatusConfig = (status: string, batch?: Batch) => {
         case 'DISPATCH_COMPLETED':
         case 'COMPLETED': // Legacy support
             return { label: 'Completed', color: COLORS.status.success, bg: 'rgba(76, 175, 80, 0.1)' }; // Green
+        case BatchStatus.IN_TRANSIT:
+        case 'IN_TRANSIT':
+            return { label: 'In Transit', color: COLORS.status.warning, bg: 'rgba(255, 152, 0, 0.1)' }; // Orange
+        case BatchStatus.DELIVERED:
+        case 'DELIVERED':
+            return { label: 'Delivered', color: COLORS.status.success, bg: 'rgba(76, 175, 80, 0.1)' }; // Green
         case BatchStatus.CANCELLED:
         case 'CANCELLED':
             return { label: 'Cancelled', color: COLORS.status.error, bg: 'rgba(244, 67, 54, 0.1)' }; // Red

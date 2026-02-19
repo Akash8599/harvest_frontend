@@ -121,6 +121,11 @@ export const BatchesScreen: React.FC = () => {
             </View>
             <View style={styles.headerText}>
               <Text style={styles.farmName}>{item.farmName}</Text>
+              {(item as any).farmLocation && (
+                <Text style={[styles.batchId, { fontSize: 11, color: COLORS.text.muted }]}>
+                  📍 {(item as any).farmLocation}
+                </Text>
+              )}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[styles.batchId, { fontSize: 11, color: COLORS.text.muted }]}>#{item.batchId}</Text>
                 <View style={{ width: 1, height: 12, backgroundColor: COLORS.glass.border }} />
@@ -208,7 +213,9 @@ export const BatchesScreen: React.FC = () => {
           );
         }
         if (activeTab === 'completed') {
-          return b.status === BatchStatus.DISPATCH_COMPLETED;
+          return b.status === BatchStatus.DISPATCH_COMPLETED || 
+                 b.status === BatchStatus.IN_TRANSIT || 
+                 b.status === BatchStatus.DELIVERED;
         }
         return true;
       });
