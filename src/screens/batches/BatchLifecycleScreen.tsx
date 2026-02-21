@@ -25,6 +25,7 @@ import { BatchStatusBadge } from '../../components/common/BatchStatusBadge';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../constants';
 import { farmApi, harvestApi } from '../../services/api';
 import { Batch, BatchStatus } from '../../types';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -278,13 +279,16 @@ export const BatchLifecycleScreen: React.FC = () => {
                 {inspection?.photoUrls && inspection.photoUrls.length > 0 && (
                     <View style={{ marginTop: SPACING.md }}>
                         <Text style={[styles.detailLabel, { marginBottom: SPACING.xs }]}>Photos</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <HorizontalScrollWrapper
+                            horizontalPadding={0}
+                            itemGap={8}
+                        >
                             {inspection.photoUrls.map((url: string, index: number) => (
                                 <View key={index} style={styles.thumbPlaceholder}>
                                     <Image source={{ uri: url }} style={{ width: '100%', height: '100%', borderRadius: 8 }} />
                                 </View>
                             ))}
-                        </ScrollView>
+                        </HorizontalScrollWrapper>
                     </View>
                 )}
             </View>
@@ -430,7 +434,7 @@ export const BatchLifecycleScreen: React.FC = () => {
         <View>
             <View style={{ marginTop: SPACING.xs }}>
                 <Text style={[styles.subSectionTitle, { marginBottom: SPACING.md }]}>Shipment Details</Text>
-                
+
                 {/* Summary Stats */}
                 <View style={styles.statsGrid}>
                     <View style={styles.statItem}>
@@ -472,207 +476,214 @@ export const BatchLifecycleScreen: React.FC = () => {
                         ))}
                     </View>
                 )}
-                
+
                 {(!gatePasses || gatePasses.length === 0) && <Text style={styles.emptyText}>No shipment details available.</Text>}
             </View>
         </View>
     );
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Sticky/Fixed Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Icon name="arrow-left" size={24} color={COLORS.text.primary} />
-                </TouchableOpacity>
-                <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={styles.headerTitle}>Batch Lifecycle</Text>
-                </View>
-                <View style={{ width: 40 }} />
-            </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-
-                {/* 1. Batch Info Card (Premium) */}
-                <GlassCard style={styles.infoCard}>
-                    <View style={styles.infoTop}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.farmName}>{activeBatch.farmName}</Text>
-                            {activeBatch.farmLocation && (
-                                <Text style={[styles.batchCode, { color: COLORS.text.muted }]}>
-                                    📍 {activeBatch.farmLocation}
-                                </Text>
-                            )}
-                            <Text style={styles.batchCode}>Batch #{activeBatch.batchId}</Text>
-                        </View>
-                        <View style={{ alignItems: 'center' }}>
-                            <BatchStatusBadge status={activeBatch.status} />
-                            {activeBatch.produceType && (
-                                <Text style={[styles.batchCode, { color: COLORS.accent.main, fontWeight: '600', marginTop: 4 }]}>
-                                    Item: {activeBatch.produceType}
-                                </Text>
-                            )}
-                        </View>
+        <LinearGradient
+            colors={['#0F5132', '#0F2027', '#0A0F1C']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ flex: 1 }}
+        >
+            <SafeAreaView style={{ flex: 1 }}>
+                {/* Sticky/Fixed Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <Icon name="arrow-left" size={24} color={COLORS.text.primary} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={styles.headerTitle}>Batch Lifecycle</Text>
                     </View>
+                    <View style={{ width: 40 }} />
+                </View>
 
-                    <View style={styles.divider} />
+                <ScrollView contentContainerStyle={styles.scrollContent}>
 
-                    <View style={styles.infoStats}>
-                        <View style={styles.infoStatItem}>
-                            <Icon name="calendar" size={16} color={COLORS.text.muted} />
-                            <Text style={styles.infoStatText}>
-                                {activeBatch.startDate ? new Date(activeBatch.startDate).toLocaleDateString() : 'N/A'}
-                            </Text>
+                    {/* 1. Batch Info Card (Premium) */}
+                    <GlassCard style={styles.infoCard}>
+                        <View style={styles.infoTop}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.farmName}>{activeBatch.farmName}</Text>
+                                {activeBatch.farmLocation && (
+                                    <Text style={[styles.batchCode, { color: COLORS.text.muted }]}>
+                                        📍 {activeBatch.farmLocation}
+                                    </Text>
+                                )}
+                                <Text style={styles.batchCode}>Batch #{activeBatch.batchId}</Text>
+                            </View>
+                            <View style={{ alignItems: 'center' }}>
+                                <BatchStatusBadge status={activeBatch.status} />
+                                {activeBatch.produceType && (
+                                    <Text style={[styles.batchCode, { color: COLORS.accent.main, fontWeight: '600', marginTop: 4 }]}>
+                                        Item: {activeBatch.produceType}
+                                    </Text>
+                                )}
+                            </View>
                         </View>
-                        <View style={styles.infoStatItem}>
-                            <Icon name="package-variant-closed" size={16} color={COLORS.text.muted} />
-                            <Text style={styles.infoStatText}>{activeBatch.estimatedBoxes} Est. Boxes</Text>
-                        </View>
-                        {activeBatch.farmLocation && (
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.infoStats}>
                             <View style={styles.infoStatItem}>
-                                <Icon name="map-marker" size={16} color={COLORS.text.muted} />
-                                <Text style={styles.infoStatText}>{activeBatch.farmLocation}</Text>
+                                <Icon name="calendar" size={16} color={COLORS.text.muted} />
+                                <Text style={styles.infoStatText}>
+                                    {activeBatch.startDate ? new Date(activeBatch.startDate).toLocaleDateString() : 'N/A'}
+                                </Text>
+                            </View>
+                            <View style={styles.infoStatItem}>
+                                <Icon name="package-variant-closed" size={16} color={COLORS.text.muted} />
+                                <Text style={styles.infoStatText}>{activeBatch.estimatedBoxes} Est. Boxes</Text>
+                            </View>
+                            {activeBatch.farmLocation && (
+                                <View style={styles.infoStatItem}>
+                                    <Icon name="map-marker" size={16} color={COLORS.text.muted} />
+                                    <Text style={styles.infoStatText}>{activeBatch.farmLocation}</Text>
+                                </View>
+                            )}
+                        </View>
+                    </GlassCard>
+
+                    {/* 2. Timeline Flow */}
+                    <View style={styles.timelineContainer}>
+
+                        {/* Step 1: Inspection */}
+                        {renderTimelineStep(
+                            'Inspection',
+                            'clipboard-check',
+                            'Approved',
+                            COLORS.status.success,
+                            activeBatch.startDate,
+                            <Text style={styles.detailText}>Passed checks. Ready for harvest.</Text>,
+                            renderInspectionContent()
+                        )}
+
+                        {/* Step 2: Harvest */}
+                        {renderTimelineStep(
+                            'Harvesting',
+                            'basket',
+                            activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'In Progress',
+                            activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.warning,
+                            undefined,
+                            (
+                                <View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                        <Text style={{ fontSize: 20, fontWeight: 'bold', color: COLORS.text.primary }}>{totalHarvested}</Text>
+                                        <Text style={{ fontSize: 12, color: COLORS.text.muted, marginLeft: 4 }}>/ {estimated} Allocated</Text>
+                                    </View>
+                                    <View style={styles.progressBarBg}>
+                                        <View style={[styles.progressBarFill, { width: (percent + '%') as any, backgroundColor: activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS ? COLORS.status.success : COLORS.status.warning }]} />
+                                    </View>
+                                </View>
+                            ),
+                            harvestFullContent
+                        )}
+
+                        {/* Step 3: Dispatch - Show only when harvest is completed */}
+                        {(activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
+                            <View>
+                                {renderTimelineStep(
+                                    'Dispatch',
+                                    'truck-delivery',
+                                    activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'Pending',
+                                    activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.info,
+                                    undefined,
+                                    (
+                                        <View>
+                                            <Text style={styles.detailText}>
+                                                {gatePasses?.length || 0} Gate Passes Generated
+                                            </Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                                <Icon name="package-variant" size={14} color={COLORS.text.secondary} />
+                                                <Text style={styles.gpText}>
+                                                    {totalDispatched} Boxes Shipped
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ),
+                                    dispatchFullContent,
+                                    false // isLast
+                                )}
                             </View>
                         )}
-                    </View>
-                </GlassCard>
 
-                {/* 2. Timeline Flow */}
-                <View style={styles.timelineContainer}>
-
-                    {/* Step 1: Inspection */}
-                    {renderTimelineStep(
-                        'Inspection',
-                        'clipboard-check',
-                        'Approved',
-                        COLORS.status.success,
-                        activeBatch.startDate,
-                        <Text style={styles.detailText}>Passed checks. Ready for harvest.</Text>,
-                        renderInspectionContent()
-                    )}
-
-                    {/* Step 2: Harvest */}
-                    {renderTimelineStep(
-                        'Harvesting',
-                        'basket',
-                        activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'In Progress',
-                        activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.warning,
-                        undefined,
-                        (
+                        {/* Step 4: In Transit - Show only when dispatch is in progress or completed */}
+                        {(activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
                             <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: COLORS.text.primary }}>{totalHarvested}</Text>
-                                    <Text style={{ fontSize: 12, color: COLORS.text.muted, marginLeft: 4 }}>/ {estimated} Allocated</Text>
-                                </View>
-                                <View style={styles.progressBarBg}>
-                                    <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS ? COLORS.status.success : COLORS.status.warning }]} />
-                                </View>
+                                {renderTimelineStep(
+                                    'In Transit',
+                                    'truck',
+                                    activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'In Transit' : 'Pending',
+                                    activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.warning : COLORS.status.muted,
+                                    undefined,
+                                    (
+                                        <View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Icon name="ticket" size={14} color={COLORS.text.secondary} />
+                                                    <Text style={[styles.detailText, { marginLeft: 4 }]}>
+                                                        {gatePasses?.length || 0} Gate Passes
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Icon name="package-variant" size={14} color={COLORS.text.secondary} />
+                                                    <Text style={[styles.detailText, { marginLeft: 4 }]}>
+                                                        {totalDispatched} Boxes
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ),
+                                    inTransitFullContent,
+                                    true // isLast
+                                )}
                             </View>
-                        ),
-                        harvestFullContent
-                    )}
+                        )}
 
-                    {/* Step 3: Dispatch - Show only when harvest is completed */}
-                    {(activeBatch.status === BatchStatus.HARVEST_COMPLETED || activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
-                    <View>
-                    {renderTimelineStep(
-                        'Dispatch',
-                        'truck-delivery',
-                        activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'Completed' : 'Pending',
-                        activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.success : COLORS.status.info,
-                        undefined,
-                        (
-                            <View>
-                                <Text style={styles.detailText}>
-                                    {gatePasses?.length || 0} Gate Passes Generated
-                                </Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                    <Icon name="package-variant" size={14} color={COLORS.text.secondary} />
-                                    <Text style={styles.gpText}>
-                                        {totalDispatched} Boxes Shipped
-                                    </Text>
-                                </View>
-                            </View>
-                        ),
-                        dispatchFullContent,
-                        false // isLast
-                    )}
                     </View>
+
+                    {/* Action Button for Harvest Completion */}
+                    {(activeBatch.status === 'HARVEST_IN_PROGRESS' || activeBatch.status === 'HARVESTING') && (
+                        <View style={{ marginTop: SPACING.xl, marginBottom: SPACING.xl }}>
+                            <GlassButton
+                                title="Mark Harvest Completed"
+                                onPress={handleCompleteHarvest}
+                                icon={<Icon name="check-all" size={24} color={COLORS.text.primary} />}
+                                style={{ backgroundColor: COLORS.primary.main }}
+                            />
+                            <Text style={{ textAlign: 'center', color: COLORS.text.muted, marginTop: SPACING.sm, fontSize: 12 }}>
+                                This will lock the batch from further harvest reports.
+                            </Text>
+                        </View>
                     )}
 
-                    {/* Step 4: In Transit - Show only when dispatch is in progress or completed */}
-                    {(activeBatch.status === BatchStatus.DISPATCH_IN_PROGRESS || activeBatch.status === BatchStatus.DISPATCH_COMPLETED || activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED) && (
-                    <View>
-                    {renderTimelineStep(
-                        'In Transit',
-                        'truck',
-                        activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? 'In Transit' : 'Pending',
-                        activeBatch.status === BatchStatus.IN_TRANSIT || activeBatch.status === BatchStatus.DELIVERED ? COLORS.status.warning : COLORS.status.muted,
-                        undefined,
-                        (
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Icon name="ticket" size={14} color={COLORS.text.secondary} />
-                                        <Text style={[styles.detailText, { marginLeft: 4 }]}>
-                                            {gatePasses?.length || 0} Gate Passes
-                                        </Text>
-                                    </View>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Icon name="package-variant" size={14} color={COLORS.text.secondary} />
-                                        <Text style={[styles.detailText, { marginLeft: 4 }]}>
-                                            {totalDispatched} Boxes
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-                        ),
-                        inTransitFullContent,
-                        true // isLast
-                    )}
-                    </View>
+                    {/* Action Button for Delivered */}
+                    {activeBatch.status === BatchStatus.IN_TRANSIT && (
+                        <View style={{ marginTop: SPACING.md, marginBottom: SPACING.xl }}>
+                            <GlassButton
+                                title="Mark Delivered"
+                                onPress={handleMarkDelivered}
+                                icon={<Icon name="check-decagram" size={24} color={COLORS.text.primary} />}
+                                style={{ backgroundColor: COLORS.status.success }}
+                            />
+                        </View>
                     )}
 
-                </View>
+                </ScrollView>
 
-                {/* Action Button for Harvest Completion */}
-                {(activeBatch.status === 'HARVEST_IN_PROGRESS' || activeBatch.status === 'HARVESTING') && (
-                    <View style={{ marginTop: SPACING.xl, marginBottom: SPACING.xl }}>
-                        <GlassButton
-                            title="Mark Harvest Completed"
-                            onPress={handleCompleteHarvest}
-                            icon={<Icon name="check-all" size={24} color={COLORS.text.primary} />}
-                            style={{ backgroundColor: COLORS.primary.main }}
-                        />
-                        <Text style={{ textAlign: 'center', color: COLORS.text.muted, marginTop: SPACING.sm, fontSize: 12 }}>
-                            This will lock the batch from further harvest reports.
-                        </Text>
-                    </View>
-                )}
+                {/* Modal for Deep Dives */}
+                {renderDetailModal()}
 
-                {/* Action Button for Delivered */}
-                {activeBatch.status === BatchStatus.IN_TRANSIT && (
-                    <View style={{ marginTop: SPACING.md, marginBottom: SPACING.xl }}>
-                        <GlassButton
-                            title="Mark Delivered"
-                            onPress={handleMarkDelivered}
-                            icon={<Icon name="check-decagram" size={24} color={COLORS.text.primary} />}
-                            style={{ backgroundColor: COLORS.status.success }}
-                        />
-                    </View>
-                )}
-
-            </ScrollView>
-
-            {/* Modal for Deep Dives */}
-            {renderDetailModal()}
-
-        </SafeAreaView >
+            </SafeAreaView >
+        </LinearGradient>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background.dark },
+    container: { flex: 1 },
 
     // Header
     header: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.glass.border },
@@ -717,7 +728,7 @@ const styles = StyleSheet.create({
     detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.xs, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
     detailLabel: { color: COLORS.text.muted, fontSize: TYPOGRAPHY.sizes.sm },
     detailValue: { color: COLORS.text.primary, fontWeight: '500' },
-    thumbPlaceholder: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, marginRight: 8, alignItems: 'center', justifyContent: 'center' },
+    thumbPlaceholder: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 
     // Stats Grid
     statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: SPACING.sm },

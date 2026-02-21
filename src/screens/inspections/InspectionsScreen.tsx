@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { CameraScreen } from '../common/CameraScreen';
 import {
   View,
@@ -15,7 +15,9 @@ import {
   Linking,
   Modal,
   Keyboard,
-  TextInput
+  TextInput,
+  Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -35,6 +37,7 @@ import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { Farm, FarmInspectionRequest, UserRole } from '../../types';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 
 interface PhotoItem {
   uri: string;
@@ -87,16 +90,43 @@ export const InspectionsScreen: React.FC = () => {
   const queryClient = useQueryClient();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuthStore();
-  // Default tab logic: Vendors see 'requests' (to pick one), Approvers see 'approvals'
-  // Default tab logic: Vendors see 'pending' (requests)
   const [activeTab, setActiveTab] = useState<TabType>('pending');
+
+  // Swipe pager setup
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const pagerRef = useRef<any>(null);
+  const tabIndicatorX = useRef(new Animated.Value(0)).current;
+  const TAB_PAGES: TabType[] = ['pending', 'history'];
+
+  const scrollToTab = (tab: TabType) => {
+    const idx = TAB_PAGES.indexOf(tab);
+    setActiveTab(tab);
+    pagerRef.current?.scrollTo({ x: idx * SCREEN_WIDTH, animated: true });
+    Animated.spring(tabIndicatorX, {
+      toValue: idx,
+      useNativeDriver: true,
+      tension: 70,
+      friction: 10,
+    }).start();
+  };
+
+  const handlePageScroll = (e: any) => {
+    const rawIdx = e.nativeEvent.contentOffset.x / SCREEN_WIDTH;
+    tabIndicatorX.setValue(rawIdx);
+  };
+
+  const handlePageScrollEnd = (e: any) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const newTab = TAB_PAGES[idx];
+    if (newTab && newTab !== activeTab) setActiveTab(newTab);
+  };
 
   // Auto-refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       // Always refetch farms to get latest data
       queryClient.invalidateQueries({ queryKey: ['farms'] });
-      
+
       // Invalidate queries to trigger background refetch and update badges
       if (isVendor) {
         queryClient.invalidateQueries({ queryKey: ['myInspections'] });
@@ -547,7 +577,11 @@ export const InspectionsScreen: React.FC = () => {
       {/* Media */}
       <View style={styles.mediaSection}>
         <Text style={styles.label}>Photos ({photos.length}/5)</Text>
-        <ScrollView horizontal style={styles.mediaList} showsHorizontalScrollIndicator={false}>
+        <HorizontalScrollWrapper
+          containerStyle={styles.mediaList}
+          horizontalPadding={0}
+          itemGap={8}
+        >
           {photos.map((p, i) => (
             <View key={i} style={styles.mediaItem}>
               <Image source={{ uri: p.uri }} style={styles.mediaImage} />
@@ -570,7 +604,7 @@ export const InspectionsScreen: React.FC = () => {
               )}
             </TouchableOpacity>
           )}
-        </ScrollView>
+        </HorizontalScrollWrapper>
       </View>
 
       <TouchableOpacity
@@ -907,29 +941,35 @@ export const InspectionsScreen: React.FC = () => {
     );
   };
 
-  const renderTabs = () => (
-    <View style={styles.tabsContainer}>
-      <TouchableOpacity
-        style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-        onPress={() => setActiveTab('pending')}
-      >
-        <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
-          Pending ({
-            isApprover
-              ? (pendingApprovals?.length || 0)
-              : ((requests?.filter((r: any) => ['PENDING', 'ASSIGNED', 'REQUESTED', 'IN_PROGRESS'].includes(r.status) && !myInspections?.some((i: any) => i.requestId === r.id)).length || 0) + (myInspections?.filter((i: any) => i.status === 'PENDING').length || 0))
-          })
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-        onPress={() => setActiveTab('history')}
-      >
-        <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const renderTabs = () => {
+    const pendingCount = isApprover
+      ? (pendingApprovals?.length || 0)
+      : (
+        (requests?.filter((r: any) =>
+          ['PENDING', 'ASSIGNED', 'REQUESTED', 'IN_PROGRESS'].includes(r.status) &&
+          !myInspections?.some((i: any) => i.requestId === r.id)
+        ).length || 0) +
+        (myInspections?.filter((i: any) => i.status === 'PENDING').length || 0)
+      );
+    return (
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
+          onPress={() => scrollToTab('pending')}
+        >
+          <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
+            Pending ({pendingCount})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+          onPress={() => scrollToTab('history')}
+        >
+          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <LinearGradient
@@ -938,214 +978,241 @@ export const InspectionsScreen: React.FC = () => {
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
     >
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Inspections</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => {
-            queryClient.invalidateQueries({ queryKey: ['myInspections'] });
-            queryClient.invalidateQueries({ queryKey: ['allInspections'] });
-            Toast.show({ type: 'success', text1: 'Refreshed' });
-          }}>
-            <Icon name="refresh" size={24} color={THEME.colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {renderTabs()}
-
-      {/* Global Search Bar */}
-      {
-        !(activeTab === 'new' && requestId) && (
-          <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-            <GlassSearchBar
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search inspections..."
-              placeholderTextColor={THEME.colors.input.placeholder}
-            />
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Inspections</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => {
+              queryClient.invalidateQueries({ queryKey: ['myInspections'] });
+              queryClient.invalidateQueries({ queryKey: ['allInspections'] });
+              Toast.show({ type: 'success', text1: 'Refreshed' });
+            }}>
+              <Icon name="refresh" size={24} color={THEME.colors.text.secondary} />
+            </TouchableOpacity>
           </View>
-        )
-      }
+        </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={
-              activeTab === 'pending' ? requestsLoading :
-                activeTab === 'history' ? (isApprover ? allInspectionsLoading : inspectionsLoading) :
-                  false
-            }
-            onRefresh={() => {
-              if (activeTab === 'pending') refetchRequests();
-              else if (activeTab === 'history') {
-                if (isApprover) refetchAllInspections();
-                else refetchInspections();
-              }
-              else {
-                queryClient.invalidateQueries({ queryKey: ['farms'] });
-              }
-            }}
-            tintColor={THEME.colors.active}
-          />
-        }
-      >
-        {/* Content based on active tab */}
-        {activeTab === 'pending' && (isApprover ? renderApprovalsList() : renderPendingTab())}
-        {activeTab === 'history' && renderHistoryTab()}
-      </ScrollView>
+        {renderTabs()}
 
-      {/* Review Modal */}
-      <Modal
-        visible={!!inspectionToReview}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setInspectionToReview(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.08)' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Review Inspection</Text>
-              <TouchableOpacity onPress={() => setInspectionToReview(null)}>
-                <Icon name="close" size={24} color={THEME.colors.text.muted} />
-              </TouchableOpacity>
+        {/* Global Search Bar */}
+        {
+          !(activeTab === 'new' && requestId) && (
+            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+              <GlassSearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search inspections..."
+                placeholderTextColor={THEME.colors.input.placeholder}
+              />
             </View>
+          )
+        }
 
-            <ScrollView style={styles.modalScroll}>
-              {(() => {
-                const farm = inspectionToReview?.farmId ? getFarmById(inspectionToReview.farmId) : null;
-                const farmLocation = inspectionToReview?.farmLocation || farm?.location || 'N/A';
-                const itemName = inspectionToReview?.itemName || farm?.produceType || 'N/A';
-                
-                return (
-                  <>
-                    <Text style={styles.detailLabel}>Farm</Text>
-                    <Text style={styles.detailValue}>
-                      {inspectionToReview?.farmName} ({farmLocation})
-                    </Text>
-
-                    <Text style={styles.detailLabel}>Vendor</Text>
-                    <Text style={styles.detailValue}>{inspectionToReview?.vendorName}</Text>
-
-                    <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.detailLabel}>Item</Text>
-                        <Text style={styles.detailValue}>{itemName}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.detailLabel}>Est. Boxes</Text>
-                        <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
-                      </View>
-                    </View>
-                  </>
-                );
-              })()}
-
-              <View style={{ flexDirection: 'row', gap: 20 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.detailLabel}>Date</Text>
-                  <Text style={styles.detailValue}>{new Date(inspectionToReview?.createdAt).toLocaleDateString()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.detailLabel}>Status</Text>
-                  <Text style={[styles.detailValue, { color: inspectionToReview?.status === 'APPROVED' ? COLORS.status.success : inspectionToReview?.status === 'REJECTED' ? COLORS.status.error : '#F59E0B' }]}>
-                    {inspectionToReview?.status || 'PENDING'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.detailLabel}>Notes</Text>
-              <View style={styles.noteContainer}>
-                <Text style={{ color: THEME.colors.text.secondary }}>{inspectionToReview?.notes || 'No notes'}</Text>
-              </View>
-
-              <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Photos</Text>
-              <ScrollView horizontal style={styles.mediaScroll} showsHorizontalScrollIndicator={false}>
-                {inspectionToReview?.photos?.map((photo: string, index: number) => (
-                  <Image key={index} source={{ uri: photo }} style={styles.reviewImage} />
-                ))}
-                {!inspectionToReview?.photos?.length && <Text style={styles.emptyText}>No photos</Text>}
-              </ScrollView>
-
-              <Text style={styles.sectionTitle}>Video</Text>
-              {inspectionToReview?.video ? (
-                <TouchableOpacity onPress={() => Linking.openURL(inspectionToReview.video)}>
-                  <View style={styles.videoLinkButton}>
-                    <Icon name="play-circle-outline" size={32} color={THEME.colors.active} />
-                    <Text style={styles.videoLinkText}>Watch Video</Text>
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.emptyText}>No video</Text>
-              )}
-
-              {inspectionToReview?.status === 'PENDING' && isApprover && (
-                <View style={styles.actionRow}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'REJECTED', reason: 'Declined by Admin' });
-                      setInspectionToReview(null);
-                    }}
-                    style={{ flex: 1, marginRight: 8, borderColor: '#EF4444', borderWidth: 1, padding: 12, borderRadius: 16, alignItems: 'center' }}
-                  >
-                    <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Reject</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'APPROVED' });
-                      setInspectionToReview(null);
-                    }}
-                  >
-                    <LinearGradient
-                      colors={THEME.colors.button.primaryGradient}
-                      style={{ paddingVertical: 12, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', minWidth: 120 }}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Approve</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Inspection Form Modal */}
-      <Modal
-        visible={showInspectionModal}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={closeInspectionModal}
-      >
-        <View style={styles.inspectionModalOverlay}>
-          <View style={styles.inspectionModalContent}>
+        {/* Swipeable pager wrapping both tabs */}
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={handlePageScroll}
+          onMomentumScrollEnd={handlePageScrollEnd}
+          keyboardShouldPersistTaps="handled"
+          style={{ flex: 1 }}
+        >
+          {/* PAGE 0 — Pending */}
+          <View style={{ width: SCREEN_WIDTH }}>
             <ScrollView
+              contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ padding: 20 }}
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={requestsLoading}
+                  onRefresh={() => refetchRequests()}
+                  tintColor={THEME.colors.active}
+                />
+              }
             >
-              {renderNewInspectionForm()}
+              {isApprover ? renderApprovalsList() : renderPendingTab()}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
 
-      {/* Camera Modal */}
-      <Modal
-        visible={showCamera}
-        animationType="slide"
-        onRequestClose={() => setShowCamera(false)}
-      >
-        <CameraScreen
-          onCapture={handleCameraCapture}
-          onClose={() => setShowCamera(false)}
-        />
-      </Modal>
-    </SafeAreaView>
+          {/* PAGE 1 — History */}
+          <View style={{ width: SCREEN_WIDTH }}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isApprover ? allInspectionsLoading : inspectionsLoading}
+                  onRefresh={() => {
+                    if (isApprover) refetchAllInspections();
+                    else refetchInspections();
+                  }}
+                  tintColor={THEME.colors.active}
+                />
+              }
+            >
+              {renderHistoryTab()}
+            </ScrollView>
+          </View>
+        </ScrollView>
+
+        {/* Review Modal */}
+        <Modal
+          visible={!!inspectionToReview}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setInspectionToReview(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.08)' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Review Inspection</Text>
+                <TouchableOpacity onPress={() => setInspectionToReview(null)}>
+                  <Icon name="close" size={24} color={THEME.colors.text.muted} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScroll}>
+                {(() => {
+                  const farm = inspectionToReview?.farmId ? getFarmById(inspectionToReview.farmId) : null;
+                  const farmLocation = inspectionToReview?.farmLocation || farm?.location || 'N/A';
+                  const itemName = inspectionToReview?.itemName || farm?.produceType || 'N/A';
+
+                  return (
+                    <>
+                      <Text style={styles.detailLabel}>Farm</Text>
+                      <Text style={styles.detailValue}>
+                        {inspectionToReview?.farmName} ({farmLocation})
+                      </Text>
+
+                      <Text style={styles.detailLabel}>Vendor</Text>
+                      <Text style={styles.detailValue}>{inspectionToReview?.vendorName}</Text>
+
+                      <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>Item</Text>
+                          <Text style={styles.detailValue}>{itemName}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>Est. Boxes</Text>
+                          <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
+                        </View>
+                      </View>
+                    </>
+                  );
+                })()}
+
+                <View style={{ flexDirection: 'row', gap: 20 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Date</Text>
+                    <Text style={styles.detailValue}>{new Date(inspectionToReview?.createdAt).toLocaleDateString()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Status</Text>
+                    <Text style={[styles.detailValue, { color: inspectionToReview?.status === 'APPROVED' ? COLORS.status.success : inspectionToReview?.status === 'REJECTED' ? COLORS.status.error : '#F59E0B' }]}>
+                      {inspectionToReview?.status || 'PENDING'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.detailLabel}>Notes</Text>
+                <View style={styles.noteContainer}>
+                  <Text style={{ color: THEME.colors.text.secondary }}>{inspectionToReview?.notes || 'No notes'}</Text>
+                </View>
+
+                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Photos</Text>
+                <HorizontalScrollWrapper
+                  horizontalPadding={0}
+                  itemGap={12}
+                  containerStyle={styles.mediaScroll}
+                >
+                  {inspectionToReview?.photos?.map((photo: string, index: number) => (
+                    <Image key={index} source={{ uri: photo }} style={styles.reviewImage} />
+                  ))}
+                  {!inspectionToReview?.photos?.length && <Text style={styles.emptyText}>No photos</Text>}
+                </HorizontalScrollWrapper>
+
+                <Text style={styles.sectionTitle}>Video</Text>
+                {inspectionToReview?.video ? (
+                  <TouchableOpacity onPress={() => Linking.openURL(inspectionToReview.video)}>
+                    <View style={styles.videoLinkButton}>
+                      <Icon name="play-circle-outline" size={32} color={THEME.colors.active} />
+                      <Text style={styles.videoLinkText}>Watch Video</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.emptyText}>No video</Text>
+                )}
+
+                {inspectionToReview?.status === 'PENDING' && isApprover && (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'REJECTED', reason: 'Declined by Admin' });
+                        setInspectionToReview(null);
+                      }}
+                      style={{ flex: 1, marginRight: 8, borderColor: '#EF4444', borderWidth: 1, padding: 12, borderRadius: 16, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Reject</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'APPROVED' });
+                        setInspectionToReview(null);
+                      }}
+                    >
+                      <LinearGradient
+                        colors={THEME.colors.button.primaryGradient}
+                        style={{ paddingVertical: 12, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', minWidth: 120 }}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Approve</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Inspection Form Modal */}
+        <Modal
+          visible={showInspectionModal}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={closeInspectionModal}
+        >
+          <View style={styles.inspectionModalOverlay}>
+            <View style={styles.inspectionModalContent}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ padding: 20 }}
+              >
+                {renderNewInspectionForm()}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Camera Modal */}
+        <Modal
+          visible={showCamera}
+          animationType="slide"
+          onRequestClose={() => setShowCamera(false)}
+        >
+          <CameraScreen
+            onCapture={handleCameraCapture}
+            onClose={() => setShowCamera(false)}
+          />
+        </Modal>
+      </SafeAreaView>
     </LinearGradient>
   );
 };
@@ -1189,6 +1256,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
   },
   tab: {
     flex: 1,
@@ -1207,9 +1275,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   activeTabText: {
-    color: '#FFFFFF', // Primary Text
+    color: '#FFFFFF',
   },
-
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    left: 0,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#22C55E',
+  },
   // Cards (Glassmorphism)
   inspectionCard: {
     padding: 16,
@@ -1383,7 +1458,7 @@ const styles = StyleSheet.create({
   // Media
   mediaSection: { marginBottom: 16, marginTop: 16 },
   mediaList: { flexDirection: 'row' },
-  mediaItem: { position: 'relative', marginRight: 8 },
+  mediaItem: { position: 'relative' },
   mediaImage: { width: 80, height: 80, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   removeButton: { position: 'absolute', top: -6, right: -6, backgroundColor: '#EF4444', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   addMediaButton: { width: 80, height: 80, borderRadius: 14, borderWidth: 1, borderColor: '#22C55E', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(34, 197, 94, 0.05)' },
@@ -1411,7 +1486,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
   modalScroll: { padding: 20 },
-  reviewImage: { width: 200, height: 200, borderRadius: 18, marginRight: 12, backgroundColor: '#000' },
+  reviewImage: { width: 200, height: 200, borderRadius: 18, backgroundColor: '#000' },
   videoLinkButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 229, 255, 0.1)', padding: 12, borderRadius: 14, marginTop: 8 },
   videoLinkText: { marginLeft: 12, color: '#00E5FF', fontWeight: 'bold' },
   actionRow: { flexDirection: 'row', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', padding: 16 },

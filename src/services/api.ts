@@ -138,6 +138,9 @@ export const farmApi = {
     apiClient.get<ApiResponse<any[]>>('/inspections/requests', {
       params: { status },
     }),
+
+  cancelInspectionRequest: (id: string) =>
+    apiClient.patch<ApiResponse<any>>(`/inspections/requests/${id}/cancel`),
 };
 
 // Inventory API

@@ -23,6 +23,7 @@ import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { salesApi, farmApi } from '../../services/api';
 import { Batch, SaleType, SaleRequest } from '../../types';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 
 
 export const SalesScreen: React.FC = () => {
@@ -269,7 +270,11 @@ export const SalesScreen: React.FC = () => {
             {batchesLoading ? (
               <ActivityIndicator color={COLORS.primary.main} />
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.batchList}>
+              <HorizontalScrollWrapper
+                horizontalPadding={0}
+                itemGap={8}
+                containerStyle={styles.batchList}
+              >
                 {batchesData?.map((batch: Batch) => (
                   <TouchableOpacity
                     key={batch.id}
@@ -293,7 +298,7 @@ export const SalesScreen: React.FC = () => {
                     <Text style={styles.batchInfo}>{batch.actualBoxes} boxes</Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </HorizontalScrollWrapper>
             )}
 
             {/* Sale Type */}
@@ -611,7 +616,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.glass.background,
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
-    marginRight: SPACING.sm,
+    marginRight: 0,
     minWidth: 140,
     alignItems: 'center',
     borderWidth: 1,

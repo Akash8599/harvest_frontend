@@ -13,6 +13,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -24,6 +25,7 @@ import { GlassButton } from '../../components/glassmorphism/GlassButton';
 import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { GlassSearchBar } from '../../components/glassmorphism/GlassSearchBar';
 import { BatchStatusBadge } from '../../components/common/BatchStatusBadge';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi, harvestApi } from '../../services/api';
 import { Batch, DailyHarvestReport } from '../../types';
@@ -247,188 +249,194 @@ export const HarvestScreen: React.FC = () => {
   const batchInfo = batchDetails || selectedBatch;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Harvest</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleRefresh}>
-            <Icon name="refresh" size={24} color={COLORS.text.secondary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.batchSelectorSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Select Active Batch</Text>
-          <View style={styles.searchWrapper}>
-            <GlassSearchBar
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search farm or batch..."
-            />
-          </View>
-        </View>
-
-        {batchesLoading ? (
-          <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: SPACING.md }} />
-        ) : (
-          <FlatList
-            horizontal
-            data={filteredBatches}
-            renderItem={renderBatchItem}
-            keyExtractor={item => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.batchList}
-            ListEmptyComponent={
-              searchQuery ? (
-                <Text style={styles.noResultsText}>No batches match "{searchQuery}"</Text>
-              ) : null
-            }
-          />
-        )}
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isReportsLoading}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary.main}
-          />
-        }
-      >
-        {/* Batch Summary Card */}
-        {selectedBatch && (
-          <GlassCard style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <View>
-                <Text style={styles.summaryFarm}>{batchInfo.farmName}</Text>
-                <Text style={styles.summaryBatch}>Batch #{batchInfo.batchId}</Text>
-              </View>
-              {detailsLoading && <ActivityIndicator size="small" color={COLORS.primary.main} />}
-            </View>
-
-            <View style={styles.summaryDivider} />
-
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0}</Text>
-                <Text style={styles.statLab}>Allocated</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0}</Text>
-                <Text style={styles.statLab}>Harvested</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={[
-                  styles.statVal,
-                  (batchInfo.harvestRemaining ?? batchInfo.remainingBoxes ?? ((batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0) - (batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0))) <= 10 && { color: COLORS.status.error }
-                ]}>
-                  {batchInfo.harvestRemaining ?? batchInfo.remainingBoxes ?? ((batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0) - (batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0))}
-                </Text>
-                <Text style={styles.statLab}>Remaining</Text>
-              </View>
-            </View>
-
-            {/* Complete Harvest Button (Vendor Only) */}
-            {canSubmit && (batchInfo.status === 'HARVEST_IN_PROGRESS' || batchInfo.status === 'CREATED') && (
-              <View style={{ marginTop: SPACING.lg, alignItems: 'center' }}>
-                <GlassButton
-                  title="Mark Harvest Completed"
-                  onPress={() => handleCompleteHarvest(batchInfo.id)}
-                  variant="primary"
-                  icon={<Icon name="check-circle-outline" size={20} color={COLORS.text.primary} />}
-                  loading={completeHarvestMutation.isPending}
-                  style={{ width: '100%', backgroundColor: 'rgba(57, 255, 20, 0.2)', borderColor: COLORS.primary.main }}
-                  textStyle={{ fontWeight: 'bold' }}
-                />
-                <Text style={{ marginTop: SPACING.sm, fontSize: 10, color: COLORS.text.muted, textAlign: 'center' }}>
-                  This will move the batch to the completed tab.
-                </Text>
-              </View>
-            )}
-          </GlassCard>
-        )}
-
-        <View style={styles.sectionSpacer} />
-
-        {/* Tabs */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'today' && styles.activeTab]}
-            onPress={() => setActiveTab('today')}
-          >
-            <Text style={[styles.tabText, activeTab === 'today' && styles.activeTabText]}>Today</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-            onPress={() => setActiveTab('history')}
-          >
-            <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
-          </TouchableOpacity>
-        </View>
-
-        {activeTab === 'history' && (
-          <View style={styles.historySearch}>
-            <TouchableOpacity
-              style={styles.datePickerBtn}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Icon name="calendar" size={20} color={COLORS.primary.main} />
-              <Text style={styles.datePickerText}>{historyDate.toLocaleDateString()}</Text>
+    <LinearGradient
+      colors={['#0F5132', '#0F2027', '#0A0F1C']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={{ flex: 1 }}
+    >
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Harvest</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleRefresh}>
+              <Icon name="refresh" size={24} color={COLORS.text.secondary} />
             </TouchableOpacity>
-            <DatePicker
-              modal
-              open={showDatePicker}
-              date={historyDate}
-              mode="date"
-              maximumDate={new Date()}
-              onConfirm={(date) => {
-                setShowDatePicker(false);
-                setHistoryDate(date);
-              }}
-              onCancel={() => setShowDatePicker(false)}
-            />
           </View>
-        )}
+        </View>
 
-        {/* Reports List */}
-        <View style={styles.reportsSection}>
-          {currentReports.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Icon name="clipboard-text-outline" size={48} color={COLORS.text.muted} />
-              <Text style={styles.emptyText}>No reports found</Text>
+        <View style={styles.batchSelectorSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Select Active Batch</Text>
+            <View style={styles.searchWrapper}>
+              <GlassSearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search farm or batch..."
+              />
             </View>
+          </View>
+
+          {batchesLoading ? (
+            <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: SPACING.md }} />
           ) : (
-            currentReports.map((item: DailyHarvestReport) => (
-              <React.Fragment key={item.id}>
-                {renderReportItem({ item })}
-              </React.Fragment>
-            ))
+            <HorizontalScrollWrapper
+              data={filteredBatches}
+              renderItem={renderBatchItem}
+              keyExtractor={item => item.id}
+              horizontalPadding={SPACING.lg}
+              itemGap={SPACING.md}
+              containerStyle={styles.batchSelectorContainer}
+              EmptyComponent={
+                <Text style={styles.noResultsText}>
+                  {searchQuery ? 'No batches match search' : 'No active batches available'}
+                </Text>
+              }
+            />
           )}
         </View>
-      </ScrollView>
 
-      {/* FAB */}
-      {/* FAB (Hidden for Admins/Managers) */}
-      {selectedBatch && canSubmit && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate('SubmitHarvest', { batch: batchInfo })}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isReportsLoading}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary.main}
+            />
+          }
         >
-          <Icon name="plus" size={28} color="#000" />
-          <Text style={styles.fabText}>Submit Harvest</Text>
-        </TouchableOpacity>
-      )}
-    </SafeAreaView>
+          {/* Batch Summary Card */}
+          {selectedBatch && (
+            <GlassCard style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <View>
+                  <Text style={styles.summaryFarm}>{batchInfo.farmName}</Text>
+                  <Text style={styles.summaryBatch}>Batch #{batchInfo.batchId}</Text>
+                </View>
+                {detailsLoading && <ActivityIndicator size="small" color={COLORS.primary.main} />}
+              </View>
+
+              <View style={styles.summaryDivider} />
+
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statVal}>{batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0}</Text>
+                  <Text style={styles.statLab}>Allocated</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statVal}>{batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0}</Text>
+                  <Text style={styles.statLab}>Harvested</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={[
+                    styles.statVal,
+                    (batchInfo.harvestRemaining ?? batchInfo.remainingBoxes ?? ((batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0) - (batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0))) <= 10 && { color: COLORS.status.error }
+                  ]}>
+                    {batchInfo.harvestRemaining ?? batchInfo.remainingBoxes ?? ((batchInfo.allocatedBoxes ?? batchInfo.estimatedBoxes ?? 0) - (batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0))}
+                  </Text>
+                  <Text style={styles.statLab}>Remaining</Text>
+                </View>
+              </View>
+
+              {/* Complete Harvest Button (Vendor Only) */}
+              {canSubmit && (batchInfo.status === 'HARVEST_IN_PROGRESS' || batchInfo.status === 'CREATED') && (
+                <View style={{ marginTop: SPACING.lg, alignItems: 'center' }}>
+                  <GlassButton
+                    title="Mark Harvest Completed"
+                    onPress={() => handleCompleteHarvest(batchInfo.id)}
+                    variant="primary"
+                    icon={<Icon name="check-circle-outline" size={20} color={COLORS.text.primary} />}
+                    loading={completeHarvestMutation.isPending}
+                    style={{ width: '100%', backgroundColor: 'rgba(57, 255, 20, 0.2)', borderColor: COLORS.primary.main }}
+                    textStyle={{ fontWeight: 'bold' }}
+                  />
+                  <Text style={{ marginTop: SPACING.sm, fontSize: 10, color: COLORS.text.muted, textAlign: 'center' }}>
+                    This will move the batch to the completed tab.
+                  </Text>
+                </View>
+              )}
+            </GlassCard>
+          )}
+
+          <View style={styles.sectionSpacer} />
+
+          {/* Tabs */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'today' && styles.activeTab]}
+              onPress={() => setActiveTab('today')}
+            >
+              <Text style={[styles.tabText, activeTab === 'today' && styles.activeTabText]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+              onPress={() => setActiveTab('history')}
+            >
+              <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
+            </TouchableOpacity>
+          </View>
+
+          {activeTab === 'history' && (
+            <View style={styles.historySearch}>
+              <TouchableOpacity
+                style={styles.datePickerBtn}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Icon name="calendar" size={20} color={COLORS.primary.main} />
+                <Text style={styles.datePickerText}>{historyDate.toLocaleDateString()}</Text>
+              </TouchableOpacity>
+              <DatePicker
+                modal
+                open={showDatePicker}
+                date={historyDate}
+                mode="date"
+                maximumDate={new Date()}
+                onConfirm={(date) => {
+                  setShowDatePicker(false);
+                  setHistoryDate(date);
+                }}
+                onCancel={() => setShowDatePicker(false)}
+              />
+            </View>
+          )}
+
+          {/* Reports List */}
+          <View style={styles.reportsSection}>
+            {currentReports.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="clipboard-text-outline" size={48} color={COLORS.text.muted} />
+                <Text style={styles.emptyText}>No reports found</Text>
+              </View>
+            ) : (
+              currentReports.map((item: DailyHarvestReport) => (
+                <React.Fragment key={item.id}>
+                  {renderReportItem({ item })}
+                </React.Fragment>
+              ))
+            )}
+          </View>
+        </ScrollView>
+
+        {/* FAB */}
+        {/* FAB (Hidden for Admins/Managers) */}
+        {selectedBatch && canSubmit && (
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => navigation.navigate('SubmitHarvest', { batch: batchInfo })}
+          >
+            <Icon name="plus" size={28} color="#000" />
+            <Text style={styles.fabText}>Submit Harvest</Text>
+          </TouchableOpacity>
+        )}
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.dark,
   },
   header: {
     flexDirection: 'row',
@@ -458,9 +466,10 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.lg,
     marginBottom: SPACING.sm,
   },
+  batchSelectorContainer: {
+    paddingVertical: 4,
+  },
   batchList: {
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.md,
     alignItems: 'center',
   },
   sectionHeader: {

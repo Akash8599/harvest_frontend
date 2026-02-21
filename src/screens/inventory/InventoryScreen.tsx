@@ -22,6 +22,7 @@ import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { inventoryApi, farmApi, harvestApi } from '../../services/api';
 import { InventoryItem, InventoryCategory, Batch, GatePass } from '../../types';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 
 type TabType = 'overview' | 'allocate' | 'receive';
 
@@ -321,7 +322,11 @@ export const InventoryScreen: React.FC = () => {
       {batchesLoading ? (
         <ActivityIndicator color={COLORS.primary.main} />
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.batchList}>
+        <HorizontalScrollWrapper
+          horizontalPadding={0}
+          itemGap={8}
+          containerStyle={styles.batchList}
+        >
           {batches?.map((batch: Batch) => (
             <TouchableOpacity
               key={batch.id}
@@ -340,7 +345,7 @@ export const InventoryScreen: React.FC = () => {
               <Text style={styles.batchFarm}>{batch.farmName}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </HorizontalScrollWrapper>
       )}
 
       <Text style={styles.sectionTitle}>2. Select Item</Text>
@@ -631,7 +636,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: TYPOGRAPHY.sizes.md, fontWeight: '600', color: COLORS.text.primary, marginTop: SPACING.md, marginBottom: SPACING.sm },
   helperText: { fontSize: TYPOGRAPHY.sizes.sm, color: COLORS.text.muted, marginBottom: SPACING.sm },
   batchList: { flexDirection: 'row', marginBottom: SPACING.sm },
-  batchItem: { backgroundColor: COLORS.glass.background, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, marginRight: SPACING.sm, minWidth: 120, borderWidth: 1, borderColor: COLORS.glass.border },
+  batchItem: { backgroundColor: COLORS.glass.background, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, minWidth: 120, borderWidth: 1, borderColor: COLORS.glass.border },
   batchItemSelected: { borderColor: COLORS.primary.main, backgroundColor: 'rgba(57, 255, 20, 0.1)' },
   batchId: { fontSize: TYPOGRAPHY.sizes.md, fontWeight: 'bold', color: COLORS.text.primary },
   batchIdSelected: { color: COLORS.primary.main },

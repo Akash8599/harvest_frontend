@@ -208,9 +208,14 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
   const getBadgeCount = (tabName: string): number => {
     let count = 0;
 
-    // Farms: Show total count of farms
+    // Farms: Show count of recently created farms (last 7 days, not having active batches)
     if (tabName === 'Farms') {
-      return farms.length;
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const recentFarms = farms.filter((f: any) => 
+        new Date(f.createdAt) >= sevenDaysAgo
+      ).length;
+      return recentFarms;
     }
 
     // Harvest: Show pending harvest batches for everyone (Vendor sees theirs, Admin sees all)

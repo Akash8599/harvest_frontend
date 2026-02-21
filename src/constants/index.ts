@@ -21,8 +21,8 @@ export const STORAGE_KEYS = {
 export const COLORS = {
   // Background Gradient (Deep Dark Navy) - SPEC REQUIRED
   background: {
-    dark: '#020617',
-    gradient: ['#020617', '#0A0F1F', '#0F172A', '#1E293B'],
+    dark: '#0A0F1C',
+    gradient: ['#0F5132', '#0F2027', '#0A0F1C'],
     radialGlow: 'rgba(34,197,94,0.12)',
   },
 

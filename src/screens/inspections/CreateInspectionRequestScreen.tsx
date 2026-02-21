@@ -13,6 +13,7 @@ import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi, authApi } from '../../services/api';
 import { UserRole, Farm } from '../../types';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
 
 export const CreateInspectionRequestScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -98,7 +99,11 @@ export const CreateInspectionRequestScreen: React.FC = () => {
                         {farmsLoading ? (
                             <ActivityIndicator color={COLORS.primary.main} />
                         ) : (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectionList}>
+                            <HorizontalScrollWrapper
+                                horizontalPadding={0}
+                                itemGap={8}
+                                containerStyle={styles.selectionList}
+                            >
                                 {farms?.map((farm: Farm) => (
                                     <TouchableOpacity
                                         key={farm.id}
@@ -113,7 +118,7 @@ export const CreateInspectionRequestScreen: React.FC = () => {
                                         <Text style={styles.subText}>{farm.location}</Text>
                                     </TouchableOpacity>
                                 ))}
-                            </ScrollView>
+                            </HorizontalScrollWrapper>
                         )}
 
                         {/* Vendor Selection */}
@@ -121,7 +126,11 @@ export const CreateInspectionRequestScreen: React.FC = () => {
                         {vendorsLoading ? (
                             <ActivityIndicator color={COLORS.primary.main} />
                         ) : (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectionList}>
+                            <HorizontalScrollWrapper
+                                horizontalPadding={0}
+                                itemGap={8}
+                                containerStyle={styles.selectionList}
+                            >
                                 {vendors?.map((vendor: any) => (
                                     <TouchableOpacity
                                         key={vendor.id}
@@ -135,7 +144,7 @@ export const CreateInspectionRequestScreen: React.FC = () => {
                                         <Text style={[styles.selectionText, selectedVendor?.id === vendor.id && styles.selectedText]}>{vendor.fullName}</Text>
                                     </TouchableOpacity>
                                 ))}
-                            </ScrollView>
+                            </HorizontalScrollWrapper>
                         )}
 
                         <GlassInput
@@ -180,7 +189,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.glass.background,
         borderRadius: BORDER_RADIUS.md,
         padding: SPACING.md,
-        marginRight: SPACING.sm,
         minWidth: 140,
         borderWidth: 1,
         borderColor: COLORS.glass.border

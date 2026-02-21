@@ -3,24 +3,24 @@ import {
     View,
     Text,
     StyleSheet,
-    FlatList,
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
     ScrollView,
     Platform,
-    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import DatePicker from 'react-native-date-picker';
 
 import { GlassCard } from '../../components/glassmorphism/GlassCard';
-import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { GlassSearchBar } from '../../components/glassmorphism/GlassSearchBar';
 import { BatchStatusBadge } from '../../components/common/BatchStatusBadge';
+import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
+
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
 import { farmApi, harvestApi } from '../../services/api';
 import { Batch, GatePass } from '../../types';
@@ -89,7 +89,7 @@ export const GatePassScreen: React.FC = () => {
 
     const filteredBatches = selectableBatches.filter((b: Batch) =>
         (b.farmName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.batchId?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+            b.batchId?.toLowerCase().includes(searchQuery.toLowerCase())) &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERED'
     );
@@ -220,169 +220,176 @@ export const GatePassScreen: React.FC = () => {
     const batchInfo = batchDetails || selectedBatch;
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Gate Pass</Text>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={handleRefresh}>
-                        <Icon name="refresh" size={24} color={COLORS.text.secondary} />
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <View style={styles.batchSelectorSection}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Select Batch for Dispatch</Text>
-                    <View style={styles.searchWrapper}>
-                        <GlassSearchBar
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholder="Search farm or batch..."
-                        />
-                    </View>
-                </View>
-
-                {batchesLoading ? (
-                    <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: SPACING.md }} />
-                ) : (
-                    <FlatList
-                        horizontal
-                        data={filteredBatches}
-                        renderItem={renderBatchItem}
-                        keyExtractor={item => item.id}
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.batchList}
-                        ListEmptyComponent={
-                            searchQuery ? (
-                                <Text style={styles.noResultsText}>No batches match "{searchQuery}"</Text>
-                            ) : null
-                        }
-                    />
-                )}
-            </View>
-
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isReportsLoading}
-                        onRefresh={handleRefresh}
-                        tintColor={COLORS.primary.main}
-                    />
-                }
-            >
-                {/* Batch Summary Card */}
-                {selectedBatch && (
-                    <GlassCard style={styles.summaryCard}>
-                        <View style={styles.summaryHeader}>
-                            <View>
-                                <Text style={styles.summaryFarm}>{batchInfo.farmName}</Text>
-                                <Text style={styles.summaryBatch}>Batch #{batchInfo.batchId}</Text>
-                            </View>
-                            {detailsLoading && <ActivityIndicator size="small" color={COLORS.primary.main} />}
-                        </View>
-
-                        <View style={styles.summaryDivider} />
-
-                        <View style={styles.statsRow}>
-                            <View style={styles.statBox}>
-                                <Text style={styles.statVal}>{batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0}</Text>
-                                <Text style={styles.statLab}>Harvested</Text>
-                            </View>
-                            <View style={styles.statBox}>
-                                <Text style={styles.statVal}>{batchInfo.dispatchedBoxes ?? 0}</Text>
-                                <Text style={styles.statLab}>Dispatched</Text>
-                            </View>
-                            <View style={styles.statBox}>
-                                <Text style={[
-                                    styles.statVal,
-                                    (batchInfo.gatePassRemaining ?? ((batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0) - (batchInfo.dispatchedBoxes ?? 0))) <= 10 && { color: COLORS.status.error }
-                                ]}>
-                                    {batchInfo.gatePassRemaining ?? ((batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0) - (batchInfo.dispatchedBoxes ?? 0))}
-                                </Text>
-                                <Text style={styles.statLab}>In Stock</Text>
-                            </View>
-                        </View>
-                    </GlassCard>
-                )}
-
-                <View style={styles.sectionSpacer} />
-
-                {/* Tabs */}
-                <View style={styles.tabContainer}>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'today' && styles.activeTab]}
-                        onPress={() => setActiveTab('today')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'today' && styles.activeTabText]}>Today</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-                        onPress={() => setActiveTab('history')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {activeTab === 'history' && (
-                    <View style={styles.historySearch}>
-                        <TouchableOpacity
-                            style={styles.datePickerBtn}
-                            onPress={() => setShowDatePicker(true)}
-                        >
-                            <Icon name="calendar" size={20} color={COLORS.primary.main} />
-                            <Text style={styles.datePickerText}>{historyDate.toLocaleDateString()}</Text>
+        <LinearGradient
+            colors={['#0F5132', '#0F2027', '#0A0F1C']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ flex: 1 }}
+        >
+            <SafeAreaView style={{ flex: 1 }}>
+                <View style={styles.header}>
+                    <Text style={styles.title}>Gate Pass</Text>
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity onPress={handleRefresh}>
+                            <Icon name="refresh" size={24} color={COLORS.text.secondary} />
                         </TouchableOpacity>
-                        <DatePicker
-                            modal
-                            open={showDatePicker}
-                            date={historyDate}
-                            mode="date"
-                            maximumDate={new Date()}
-                            onConfirm={(date) => {
-                                setShowDatePicker(false);
-                                setHistoryDate(date);
-                            }}
-                            onCancel={() => setShowDatePicker(false)}
-                        />
                     </View>
-                )}
+                </View>
 
-                {/* Reports List */}
-                <View style={styles.reportsSection}>
-                    {currentGatePasses.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <Icon name="truck-delivery-outline" size={48} color={COLORS.text.muted} />
-                            <Text style={styles.emptyText}>No gate passes found</Text>
+                <View style={styles.batchSelectorSection}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Select Batch for Dispatch</Text>
+                        <View style={styles.searchWrapper}>
+                            <GlassSearchBar
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                placeholder="Search farm or batch..."
+                            />
                         </View>
+                    </View>
+
+                    {batchesLoading ? (
+                        <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: SPACING.md }} />
                     ) : (
-                        currentGatePasses.map((item: GatePass) => (
-                            <React.Fragment key={item.id}>
-                                {renderGatePassItem({ item })}
-                            </React.Fragment>
-                        ))
+                        <HorizontalScrollWrapper
+                            data={filteredBatches}
+                            renderItem={renderBatchItem}
+                            keyExtractor={item => item.id}
+                            horizontalPadding={SPACING.lg}
+                            itemGap={SPACING.md}
+                            containerStyle={styles.batchSelectorContainer}
+                            EmptyComponent={
+                                <Text style={styles.noResultsText}>
+                                    {searchQuery ? 'No batches match search' : 'No batches ready for dispatch'}
+                                </Text>
+                            }
+                        />
+
                     )}
                 </View>
-            </ScrollView>
 
-            {/* FAB (Hidden for Admins/Managers) */}
-            {selectedBatch && canSubmit && (
-                <TouchableOpacity
-                    style={styles.fab}
-                    onPress={() => navigation.navigate('CreateGatePass', { batch: batchInfo })}
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isReportsLoading}
+                            onRefresh={handleRefresh}
+                            tintColor={COLORS.primary.main}
+                        />
+                    }
                 >
-                    <Icon name="plus" size={28} color="#000" />
-                    <Text style={styles.fabText}>Create Gate Pass</Text>
-                </TouchableOpacity>
-            )}
-        </SafeAreaView>
+                    {/* Batch Summary Card */}
+                    {selectedBatch && (
+                        <GlassCard style={styles.summaryCard}>
+                            <View style={styles.summaryHeader}>
+                                <View>
+                                    <Text style={styles.summaryFarm}>{batchInfo.farmName}</Text>
+                                    <Text style={styles.summaryBatch}>Batch #{batchInfo.batchId}</Text>
+                                </View>
+                                {detailsLoading && <ActivityIndicator size="small" color={COLORS.primary.main} />}
+                            </View>
+
+                            <View style={styles.summaryDivider} />
+
+                            <View style={styles.statsRow}>
+                                <View style={styles.statBox}>
+                                    <Text style={styles.statVal}>{batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0}</Text>
+                                    <Text style={styles.statLab}>Harvested</Text>
+                                </View>
+                                <View style={styles.statBox}>
+                                    <Text style={styles.statVal}>{batchInfo.dispatchedBoxes ?? 0}</Text>
+                                    <Text style={styles.statLab}>Dispatched</Text>
+                                </View>
+                                <View style={styles.statBox}>
+                                    <Text style={[
+                                        styles.statVal,
+                                        (batchInfo.gatePassRemaining ?? ((batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0) - (batchInfo.dispatchedBoxes ?? 0))) <= 10 && { color: COLORS.status.error }
+                                    ]}>
+                                        {batchInfo.gatePassRemaining ?? ((batchInfo.harvestedBoxes ?? batchInfo.actualBoxes ?? 0) - (batchInfo.dispatchedBoxes ?? 0))}
+                                    </Text>
+                                    <Text style={styles.statLab}>In Stock</Text>
+                                </View>
+                            </View>
+                        </GlassCard>
+                    )}
+
+                    <View style={styles.sectionSpacer} />
+
+                    {/* Tabs */}
+                    <View style={styles.tabContainer}>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'today' && styles.activeTab]}
+                            onPress={() => setActiveTab('today')}
+                        >
+                            <Text style={[styles.tabText, activeTab === 'today' && styles.activeTabText]}>Today</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+                            onPress={() => setActiveTab('history')}
+                        >
+                            <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {activeTab === 'history' && (
+                        <View style={styles.historySearch}>
+                            <TouchableOpacity
+                                style={styles.datePickerBtn}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Icon name="calendar" size={20} color={COLORS.primary.main} />
+                                <Text style={styles.datePickerText}>{historyDate.toLocaleDateString()}</Text>
+                            </TouchableOpacity>
+                            <DatePicker
+                                modal
+                                open={showDatePicker}
+                                date={historyDate}
+                                mode="date"
+                                maximumDate={new Date()}
+                                onConfirm={(date) => {
+                                    setShowDatePicker(false);
+                                    setHistoryDate(date);
+                                }}
+                                onCancel={() => setShowDatePicker(false)}
+                            />
+                        </View>
+                    )}
+
+                    {/* Reports List */}
+                    <View style={styles.reportsSection}>
+                        {currentGatePasses.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Icon name="truck-delivery-outline" size={48} color={COLORS.text.muted} />
+                                <Text style={styles.emptyText}>No gate passes found</Text>
+                            </View>
+                        ) : (
+                            currentGatePasses.map((item: GatePass) => (
+                                <React.Fragment key={item.id}>
+                                    {renderGatePassItem({ item })}
+                                </React.Fragment>
+                            ))
+                        )}
+                    </View>
+                </ScrollView>
+
+                {/* FAB (Hidden for Admins/Managers) */}
+                {selectedBatch && canSubmit && (
+                    <TouchableOpacity
+                        style={styles.fab}
+                        onPress={() => navigation.navigate('CreateGatePass', { batch: batchInfo })}
+                    >
+                        <Icon name="plus" size={28} color="#000" />
+                        <Text style={styles.fabText}>Create Gate Pass</Text>
+                    </TouchableOpacity>
+                )}
+            </SafeAreaView>
+        </LinearGradient>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background.dark,
     },
     header: {
         flexDirection: 'row',
@@ -421,13 +428,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.lg,
         marginBottom: SPACING.sm,
     },
-    searchBar: {
-        height: 40,
-        marginBottom: 0,
+    batchSelectorContainer: {
+        paddingVertical: 4,
     },
     batchList: {
-        paddingHorizontal: SPACING.lg,
-        gap: SPACING.md,
         alignItems: 'center',
     },
     batchCard: {

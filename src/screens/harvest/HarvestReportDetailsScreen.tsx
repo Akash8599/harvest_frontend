@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 
@@ -44,7 +45,13 @@ export const HarvestReportDetailsScreen: React.FC = () => {
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <LinearGradient
+            colors={['#0F5132', '#0F2027', '#0A0F1C']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ flex: 1 }}
+        >
+            <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Icon name="chevron-left" size={32} color={COLORS.text.primary} />
@@ -128,13 +135,13 @@ export const HarvestReportDetailsScreen: React.FC = () => {
                 )}
             </ScrollView>
         </SafeAreaView>
+        </LinearGradient>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background.dark,
     },
     header: {
         flexDirection: 'row',
