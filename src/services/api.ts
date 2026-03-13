@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, API_TIMEOUT } from '../constants';
-import { LoginRequest, LoginResponse, ApiResponse, RefreshTokenRequest } from '../types';
+import { LoginRequest, LoginResponse, ApiResponse, RefreshTokenRequest, CreateUserRequest } from '../types';
 import { useAuthStore } from '../store/authStore';
 
 // Create axios instance
@@ -16,7 +16,6 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor - Add auth token
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // Get token from Zustand store
     const token = useAuthStore.getState().token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -32,7 +31,6 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<ApiResponse<any>>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // Handle 401 Unauthorized - Token expired
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
@@ -44,17 +42,13 @@ apiClient.interceptors.response.use(
           } as RefreshTokenRequest);
 
           if (response.data.success && response.data.data) {
-            // Update auth store
             useAuthStore.getState().setAuth(response.data.data);
-
-            // Retry original request with new token
             const newToken = response.data.data.token;
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             return apiClient(originalRequest);
           }
         }
       } catch (refreshError) {
-        // Refresh failed, logout user
         useAuthStore.getState().logout();
         return Promise.reject(refreshError);
       }
@@ -68,9 +62,6 @@ apiClient.interceptors.response.use(
 export const authApi = {
   login: (data: LoginRequest) =>
     apiClient.post<ApiResponse<LoginResponse>>('/auth/login', data),
-
-  register: (data: any) =>
-    apiClient.post<ApiResponse<any>>('/auth/register', data),
 
   refreshToken: (data: RefreshTokenRequest) =>
     apiClient.post<ApiResponse<LoginResponse>>('/auth/refresh', data),
@@ -86,6 +77,19 @@ export const authApi = {
 
   approveUser: (userId: string) =>
     apiClient.post<ApiResponse<void>>(`/auth/approve/${userId}`),
+
+  // Admin creates users (no self-registration)
+  createUser: (data: CreateUserRequest) =>
+    apiClient.post<ApiResponse<any>>('/auth/admin/create-user', data),
+
+  updateUser: (userId: string, data: Partial<CreateUserRequest>) =>
+    apiClient.put<ApiResponse<any>>(`/auth/users/${userId}`, data),
+
+  deactivateUser: (userId: string) =>
+    apiClient.post<ApiResponse<void>>(`/auth/users/${userId}/deactivate`),
+
+  activateUser: (userId: string) =>
+    apiClient.post<ApiResponse<void>>(`/auth/users/${userId}/activate`),
 };
 
 // Farm API
@@ -126,6 +130,7 @@ export const farmApi = {
   updateBatchStatus: (id: string, status: string) =>
     apiClient.patch<ApiResponse<any>>(`/batches/${id}/status`, { status }),
 
+  // Plot Selection Requests (enhanced)
   createInspectionRequest: (data: any) =>
     apiClient.post<ApiResponse<any>>('/inspections/requests', data),
 
@@ -208,6 +213,30 @@ export const harvestApi = {
     }),
 };
 
+// Cold Storage API
+export const coldStorageApi = {
+  // Inward
+  createInward: (data: any) =>
+    apiClient.post<ApiResponse<any>>('/cold-storage/inward', data),
+
+  getAllInwards: () =>
+    apiClient.get<ApiResponse<any[]>>('/cold-storage/inward'),
+
+  getInwardsByBatch: (batchId: string) =>
+    apiClient.get<ApiResponse<any[]>>(`/cold-storage/inward/batch/${batchId}`),
+
+  // Outward (Container Loading)
+  createOutward: (data: any) =>
+    apiClient.post<ApiResponse<any>>('/cold-storage/outward', data),
+
+  getAllOutwards: () =>
+    apiClient.get<ApiResponse<any[]>>('/cold-storage/outward'),
+
+  // Inventory summary (what's currently in cold storage)
+  getInventorySummary: () =>
+    apiClient.get<ApiResponse<any>>('/cold-storage/inventory'),
+};
+
 // Cost API
 export const costApi = {
   getBatchCost: (batchId: string) =>
@@ -242,7 +271,6 @@ export const salesApi = {
       params: { status, amount },
     }),
 
-  // Invoice PDF & Sharing
   downloadInvoicePdf: (id: string) =>
     apiClient.get(`/sales/${id}/invoice/pdf`, {
       responseType: 'blob',
@@ -288,7 +316,7 @@ export const reportApi = {
     apiClient.get<ApiResponse<any>>('/reports/my-balance'),
 };
 
-// Photo Upload API (Camera-only with fraud prevention)
+// Photo Upload API
 export const uploadApi = {
   uploadPhoto: (file: FormData, inspectionId?: string) =>
     apiClient.post<ApiResponse<string>>('/upload/photo', file, {
@@ -306,14 +334,6 @@ export const uploadApi = {
     apiClient.post<ApiResponse<string>>('/upload/video', file, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params: inspectionId ? { inspectionId } : undefined,
-    }),
-
-  uploadInspectionMedia: (photos: FormData, video: FormData) =>
-    apiClient.post<ApiResponse<{ photoUrls: string[]; videoUrl: string }>>('/upload/inspection-media', {
-      photos,
-      video,
-    }, {
-      headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
   deleteFile: (fileUrl: string) =>

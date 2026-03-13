@@ -1,9 +1,19 @@
 // User Types
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
-  MANAGER = 'MANAGER',
+  MANAGER = 'MANAGER',       // Displayed as "Supervisor" in UI
   VENDOR = 'VENDOR',
   STORE_KEEPER = 'STORE_KEEPER',
+  ACCOUNTS = 'ACCOUNTS',
+}
+
+export enum VendorType {
+  HARVESTING = 'HARVESTING',
+  PACKING_MATERIAL = 'PACKING_MATERIAL',
+  BOX_SUPPLIER = 'BOX_SUPPLIER',
+  COLD_STORAGE = 'COLD_STORAGE',
+  CHA = 'CHA',
+  TRANSPORTER = 'TRANSPORTER',
 }
 
 export interface User {
@@ -12,16 +22,33 @@ export interface User {
   fullName: string;
   phone?: string;
   role: UserRole;
+  vendorType?: VendorType;
   isActive: boolean;
   profileImageUrl?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
   createdAt: string;
+}
+
+export interface CreateUserRequest {
+  fullName: string;
+  email: string;
+  phone?: string;
+  password: string;
+  role: UserRole;
+  vendorType?: VendorType;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
 }
 
 export type RootStackParamList = {
   Login: undefined;
-  Register: undefined;
   Main: undefined;
   UserApproval: undefined;
+  UserManagement: undefined;
+  CreateUser: undefined;
   CreateInspectionRequest: undefined;
   SubmitHarvest: { batch: any };
   HarvestReportDetails: { report: any };
@@ -31,6 +58,8 @@ export type RootStackParamList = {
   BatchLifecycle: { batch?: any };
   Inspections: { newPhoto?: string };
   Camera: undefined;
+  ColdStorageInward: undefined;
+  ColdStorageOutward: undefined;
 };
 
 export interface LoginRequest {
@@ -72,10 +101,12 @@ export interface Farm {
   contactNumber?: string;
   totalArea?: number;
   areaUnit: string;
-  produceType?: string; // New field
+  produceType?: string;
+  status?: string;
   createdBy?: string;
   createdByName?: string;
   createdAt: string;
+  latestVisitDate?: string;
 }
 
 export interface FarmRequest {
@@ -86,7 +117,7 @@ export interface FarmRequest {
   contactNumber?: string;
   totalArea?: number;
   areaUnit?: string;
-  produceType?: string; // New field
+  produceType?: string;
 }
 
 // Inspection Types
@@ -94,7 +125,6 @@ export enum InspectionStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
-  // Actionable statuses
   ASSIGNED = 'ASSIGNED',
   REQUESTED = 'REQUESTED',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -109,7 +139,9 @@ export interface FarmInspection {
   farmLocation: string;
   vendorId: string;
   vendorName: string;
-  estimatedBoxes: number;
+  proposedRate?: number;
+  farmerProposedRate?: number;
+  rateStatus?: 'PENDING' | 'ADMIN_COUNTERED' | 'FARMER_COUNTERED' | 'ACCEPTED';
   inspectionNotes?: string;
   gpsLatitude: number;
   gpsLongitude: number;
@@ -120,23 +152,66 @@ export interface FarmInspection {
   approvedAt?: string;
   rejectionReason?: string;
   photoUrls: string[];
+  videoUrl?: string;
+  expectedHarvestDate?: string;
+  allocatedBoxes?: number;
+  allocatedLiners?: number;
+  allocatedCorners?: number;
+  allocatedTape?: number;
   createdAt: string;
 }
 
 export interface FarmInspectionRequest {
   farmId: string;
   requestId?: string;
-  estimatedBoxes: number;
+  proposedRate?: number;
   inspectionNotes?: string;
   gpsLatitude: number;
   gpsLongitude: number;
   gpsAccuracy?: number;
+  farmerProposedRate?: number;
   photoUrls?: string[];
+  videoUrl?: string;
 }
 
 export interface ApprovalRequest {
   approved: boolean;
   rejectionReason?: string;
+  expectedHarvestDate?: string;
+  allocatedBoxes?: number;
+  allocatedLiners?: number;
+  allocatedCorners?: number;
+  allocatedTapeMeters?: number;
+}
+
+// Plot Selection Request (enhanced)
+export interface PlotSelectionRequest {
+  id: string;
+  farmId: string;
+  farmName?: string;
+  farmLocation?: string;
+  vendorId?: string;
+  vendorName?: string;
+  visitDate?: string;
+  placeOfVisit?: string;
+  visitorName?: string;
+  visitorContact?: string;
+  proposedRate?: number;
+  notes?: string;
+  status: string;
+  createdAt: string;
+  itemName?: string;
+}
+
+export interface CreatePlotSelectionRequest {
+  farmId: string;
+  vendorId: string;
+  visitDate?: string;
+  placeOfVisit?: string;
+  visitorName?: string;
+  visitorContact?: string;
+  proposedRate?: number;
+  notes?: string;
 }
 
 // Batch Types
@@ -160,14 +235,14 @@ export interface Batch {
   farmLocation?: string;
   vendorId?: string;
   vendorName?: string;
-  produceType?: string; // Derived from Farm
+  produceType?: string;
   status: BatchStatus;
   estimatedBoxes: number;
   actualBoxes: number;
   allocatedBoxes?: number;
   harvestedBoxes?: number;
   dispatchedBoxes?: number;
-  remainingBoxes?: number; // Legacy, will be harvestRemaining
+  remainingBoxes?: number;
   harvestRemaining?: number;
   gatePassRemaining?: number;
   startDate?: string;
@@ -204,29 +279,86 @@ export interface InventoryAllocationRequest {
 }
 
 // Harvest Types
+export enum PackingWeightType {
+  KG_13 = '13',
+  KG_13_5 = '13.5',
+  KG_7 = '7',
+  KG_16 = '16',
+}
+
+export const PACKING_WEIGHT_OPTIONS = [
+  { label: '13 kg (Dubai)', value: PackingWeightType.KG_13 },
+  { label: '13.5 kg (Iran)', value: PackingWeightType.KG_13_5 },
+  { label: '7 kg (Oman)', value: PackingWeightType.KG_7 },
+  { label: '16 kg (Russia/Afghanistan)', value: PackingWeightType.KG_16 },
+];
+
 export interface DailyHarvestReport {
   id: string;
   batchId: string;
   batchIdCode: string;
   farmName?: string;
   reportDate: string;
+  // Packing
+  packingWeightType?: string;
   boxesPacked: number;
+  // Damaged
+  damagedBoxes?: number;
+  damagedBoxPhotoUrls?: string[];
+  // Wastage
   boxesWasted: number;
+  wastageWeightKg?: number;
+  wastagePhotoUrl?: string;
+  // Transport
+  vehicleNumber?: string;
+  odometerStartKm?: number;
+  odometerEndKm?: number;
+  odometerStartPhotoUrl?: string;
+  odometerEndPhotoUrl?: string;
+  distanceKm?: number;
+  ratePerKm?: number;
+  transportCost?: number;
+  // Toll
+  tollAmount?: number;
+  tollReceiptPhotoUrl?: string;
+  weighBridgePhotoUrl?: string;
+  // Labor
   laborCount: number;
-  notes?: string;
   laborCost?: number;
   laborPaymentStatus?: string;
+  notes?: string;
   createdAt: string;
 }
 
 export interface DailyHarvestRequest {
   batchId: string;
   reportDate: string;
+  // Packing
+  packingWeightType?: string;
   boxesPacked: number;
+  // Damaged
+  damagedBoxes?: number;
+  damagedBoxPhotoUrls?: string[];
+  // Wastage
   boxesWasted: number;
+  wastageWeightKg?: number;
+  wastagePhotoUrl?: string;
+  // Transport
+  vehicleNumber?: string;
+  odometerStartKm?: number;
+  odometerEndKm?: number;
+  odometerStartPhotoUrl?: string;
+  odometerEndPhotoUrl?: string;
+  ratePerKm?: number;
+  // Toll
+  tollAmount?: number;
+  tollReceiptPhotoUrl?: string;
+  weighBridgePhotoUrl?: string;
+  // Labor
   laborCount: number;
-  notes?: string;
   laborCost?: number;
+  laborPaymentStatus?: string;
+  notes?: string;
 }
 
 export enum TransportType {
@@ -272,6 +404,79 @@ export interface GatePassRequest {
   dispatchDate: string;
   notes?: string;
 }
+
+// Cold Storage Types
+export enum HandType {
+  HAND_4 = '4',
+  HAND_5 = '5',
+  HAND_6 = '6',
+  HAND_8 = '8',
+}
+
+export interface ColdStorageInward {
+  id: string;
+  batchId: string;
+  batchIdCode?: string;
+  farmName?: string;
+  vendorId?: string;
+  vendorName?: string;
+  packingWeightType?: string;
+  boxes4Hand: number;
+  boxes5Hand: number;
+  boxes6Hand: number;
+  boxes8Hand: number;
+  totalBoxes: number;
+  coldStorageName?: string;
+  coldStorageLocation?: string;
+  receiptPhotoUrl?: string;
+  receiptTime?: string;
+  inwardDate: string;
+  createdAt: string;
+}
+
+export interface CreateColdStorageInwardRequest {
+  batchId: string;
+  packingWeightType?: string;
+  boxes4Hand: number;
+  boxes5Hand: number;
+  boxes6Hand: number;
+  boxes8Hand: number;
+  coldStorageName?: string;
+  coldStorageLocation?: string;
+  receiptPhotoUrl?: string;
+  inwardDate: string;
+  notes?: string;
+}
+
+export interface ColdStorageOutward {
+  id: string;
+  containerNumber: string;
+  destination?: string;
+  packingWeightType?: string;
+  boxes4Hand: number;
+  boxes5Hand: number;
+  boxes6Hand: number;
+  boxes8Hand: number;
+  totalBoxes: number;
+  dispatchDate: string;
+  createdAt: string;
+}
+
+export interface CreateColdStorageOutwardRequest {
+  containerNumber: string;
+  destination?: string;
+  packingWeightType?: string;
+  boxes4Hand: number;
+  boxes5Hand: number;
+  boxes6Hand: number;
+  boxes8Hand: number;
+  dispatchDate: string;
+  notes?: string;
+}
+
+export const CONTAINER_CAPACITY = 1540;
+
+export const EXPORT_DESTINATIONS = ['Dubai', 'Iran', 'Oman', 'Russia', 'Afghanistan', 'Other'];
 
 // Cost Types
 export interface BatchCost {

@@ -34,7 +34,7 @@ import { GlassButton } from '../../components/glassmorphism/GlassButton';
 import { GlassInput } from '../../components/glassmorphism/GlassInput';
 import { GlassSearchBar } from '../../components/glassmorphism/GlassSearchBar';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants';
-import { farmApi } from '../../services/api';
+import { farmApi, inventoryApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { Farm, FarmInspectionRequest, UserRole } from '../../types';
 import { HorizontalScrollWrapper } from '../../components/common/HorizontalScrollWrapper';
@@ -148,7 +148,8 @@ export const InspectionsScreen: React.FC = () => {
   const [requestId, setRequestId] = useState<string | null>(null);
 
   const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null);
-  const [estimatedBoxes, setEstimatedBoxes] = useState('');
+  const [proposedRate, setProposedRate] = useState<number | undefined>();
+  const [farmerProposedRate, setFarmerProposedRate] = useState('');
   const [inspectionNotes, setInspectionNotes] = useState('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [video, setVideo] = useState<PhotoItem | null>(null);
@@ -156,6 +157,19 @@ export const InspectionsScreen: React.FC = () => {
   const [inspectionToReview, setInspectionToReview] = useState<any>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
+
+  // Rate Negotiation State
+  const [counterRate, setCounterRate] = useState<string>('');
+  const [negotiationNotes, setNegotiationNotes] = useState<string>('');
+  const [isCountering, setIsCountering] = useState(false);
+
+  // Reject State
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // Box Allocation State (for Final Approve)
+  const [allocatedBoxes, setAllocatedBoxes] = useState('');
+  const [selectedBoxItemId, setSelectedBoxItemId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   // GPS Removed as per user request
@@ -230,6 +244,16 @@ export const InspectionsScreen: React.FC = () => {
     enabled: isVendor && activeTab === 'pending',
   });
 
+  // Fetch inventory items (for box allocation on approve)
+  const { data: inventoryItems } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: async () => {
+      const response = await inventoryApi.getAllItems();
+      return response.data.data || [];
+    },
+    enabled: isApprover,
+  });
+
   // Create inspection mutation
   const createInspectionMutation = useMutation({
     mutationFn: (data: FarmInspectionRequest) => farmApi.createInspection(data),
@@ -244,7 +268,6 @@ export const InspectionsScreen: React.FC = () => {
       // Reset form
       setRequestId(null);
       setSelectedFarm(null);
-      setEstimatedBoxes('');
       setInspectionNotes('');
       setPhotos([]);
       setVideo(null);
@@ -294,18 +317,55 @@ export const InspectionsScreen: React.FC = () => {
     refetchOnMount: true,
   });
 
-  // Approve Inspection Mutation
+  // Approve Inspection Mutation (Also handles Rate Negotiation updates now)
   const approveInspectionMutation = useMutation({
-    mutationFn: ({ id, status, reason }: { id: string; status: 'APPROVED' | 'REJECTED'; reason?: string }) =>
-      farmApi.approveInspection(id, { approved: status === 'APPROVED', status, rejectionReason: reason }),
+    mutationFn: ({
+      id,
+      status,
+      reason,
+      rateStatus,
+      proposedRate,
+      farmerProposedRate,
+      negotiationNotes,
+      allocatedBoxes,
+      boxItemId
+    }: {
+      id: string;
+      status?: 'APPROVED' | 'REJECTED';
+      reason?: string;
+      rateStatus?: 'ADMIN_COUNTERED' | 'FARMER_COUNTERED' | 'ACCEPTED';
+      proposedRate?: number;
+      farmerProposedRate?: number;
+      negotiationNotes?: string;
+      allocatedBoxes?: number;
+      boxItemId?: string;
+    }) =>
+      farmApi.approveInspection(id, {
+        approved: status ? status === 'APPROVED' : undefined,
+        status,
+        rejectionReason: reason,
+        rateStatus,
+        proposedRate,
+        farmerProposedRate,
+        negotiationNotes,
+        allocatedBoxes: allocatedBoxes,
+        boxItemId: boxItemId
+      }),
     onSuccess: (_, variables) => {
       Toast.show({ type: 'success', text1: 'Status Updated' });
+      setInspectionToReview(null);
+      setIsRejecting(false);
+      setRejectReason('');
+      setAllocatedBoxes('');
+      setSelectedBoxItemId(null);
 
-      // Optimistic-like update: Improve perceived performance by manually removing from list
-      queryClient.setQueryData(['pendingInspections'], (oldData: any[]) => {
-        if (!oldData) return [];
-        return oldData.filter(item => item.id !== variables.id);
-      });
+      // Optimistic-like update: Improve perceived performance by manually removing from list if fully evaluated
+      if (variables.status === 'APPROVED' || variables.status === 'REJECTED') {
+        queryClient.setQueryData(['pendingInspections'], (oldData: any[]) => {
+          if (!oldData) return [];
+          return oldData.filter(item => item.id !== variables.id);
+        });
+      }
 
       // Invalidate everything else to ensure eventual consistency
       queryClient.invalidateQueries({ queryKey: ['pendingInspections'] });
@@ -313,6 +373,7 @@ export const InspectionsScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['allInspections'] });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       queryClient.invalidateQueries({ queryKey: ['farms'] });
+      queryClient.invalidateQueries({ queryKey: ['myInspections'] });
     },
     onError: (error: any) => {
       Toast.show({ type: 'error', text1: 'Action Failed', text2: error.message });
@@ -356,6 +417,7 @@ export const InspectionsScreen: React.FC = () => {
     if (farm) {
       setSelectedFarm(farm);
       setRequestId(request.id);
+      setProposedRate(request.proposedRate || (request as any).proposed_rate);
       if (request.notes) {
         setInspectionNotes(`[Request Notes: ${request.notes}]\n`);
       }
@@ -367,10 +429,10 @@ export const InspectionsScreen: React.FC = () => {
     setShowInspectionModal(false);
     setRequestId(null);
     setInspectionNotes('');
+    setFarmerProposedRate('');
     setSelectedFarm(null);
     setPhotos([]);
     setVideo(null);
-    setEstimatedBoxes('');
   };
 
   // ... (Permissions and Media functions remain matching original file) ...
@@ -413,16 +475,16 @@ export const InspectionsScreen: React.FC = () => {
 
 
   // Capture photo
-  const capturePhoto = async () => {
+  const capturePhoto = useCallback(async () => {
     Keyboard.dismiss();
     if (photos.length >= 5) {
       Toast.show({ type: 'info', text1: 'Limit reached', text2: 'Max 5 photos allowed' });
       return;
     }
     setShowCamera(true);
-  };
+  }, [photos.length]);
 
-  const handleCameraCapture = (photoUri: string) => {
+  const handleCameraCapture = useCallback((photoUri: string) => {
     console.log('Captured:', photoUri);
     // Add 'file://' prefix if missing
     const uri = photoUri.startsWith('file://') ? photoUri : `file://${photoUri}`;
@@ -435,7 +497,7 @@ export const InspectionsScreen: React.FC = () => {
 
     // Close camera and stay on form
     setShowCamera(false);
-  };
+  }, []);
 
   // Capture video
   const captureVideo = async () => {
@@ -482,10 +544,8 @@ export const InspectionsScreen: React.FC = () => {
     const farmLat = (selectedFarm as any).latitude ?? (selectedFarm as any).lat;
     const farmLng = (selectedFarm as any).longitude ?? (selectedFarm as any).lng;
     console.log("Selected Farm:", selectedFarm, "Coords:", farmLat, farmLng);
-    console.log("Estimated Boxes:", estimatedBoxes);
+
     console.log("Photos Check:", photos.length);
-    if (!estimatedBoxes) { Toast.show({ type: 'error', text1: 'Enter estimated boxes' }); return; }
-    if (estimatedBoxes && isNaN(parseInt(estimatedBoxes))) { Toast.show({ type: 'error', text1: 'Invalid boxes number' }); return; }
     if (photos.length === 0 && !video) { Toast.show({ type: 'error', text1: 'Capture at least 1 photo or video' }); return; }
     // Relaxed for demo - allow submission if either exists
     // if (!gpsLocation) { Toast.show({ type: 'error', text1: 'Capture GPS location' }); return; }
@@ -497,7 +557,8 @@ export const InspectionsScreen: React.FC = () => {
     const request: FarmInspectionRequest = {
       farmId: selectedFarm.id,
       requestId: requestId || undefined, // Link to request if exists
-      estimatedBoxes: parseInt(estimatedBoxes),
+      proposedRate: proposedRate || undefined, // Include the proposed rate
+      farmerProposedRate: farmerProposedRate ? parseFloat(farmerProposedRate) : undefined, // Farmer's rate from this visit
       inspectionNotes: inspectionNotes || undefined,
       // Force fallback to valid coordinates if Farm details are missing or zero
       // Use parseFloat to handle strings and || to exclude 0
@@ -549,20 +610,35 @@ export const InspectionsScreen: React.FC = () => {
               </View>
             </View>
           )}
+
+          {/* Proposal Info */}
+          {proposedRate ? (
+            <View style={[styles.farmInfoCard, { marginTop: SPACING.md, backgroundColor: 'rgba(57,255,20,0.05)' }]}>
+              <View style={[styles.farmIcon, { backgroundColor: 'rgba(57,255,20,0.1)' }]}>
+                <Icon name="handshake" size={24} color={COLORS.primary.main} />
+              </View>
+              <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between' }}>
+                <View>
+                  <Text style={styles.itemLabel}>Proposed Rate</Text>
+                  <Text style={styles.itemValue}>
+                    {proposedRate ? `₹${proposedRate}/box` : 'N/A'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
         </>
       )}
 
-      {/* Inputs */}
       <View style={{ gap: SPACING.md, marginTop: SPACING.lg }}>
         <GlassInput
-          label="Estimated Boxes"
-          value={estimatedBoxes}
-          onChangeText={setEstimatedBoxes}
+          label="Farmer Proposed Rate (₹/box)"
+          value={farmerProposedRate}
+          onChangeText={setFarmerProposedRate}
           keyboardType="numeric"
-          placeholder="e.g. 1200"
-          icon={<Icon name="package-variant" size={20} color={COLORS.text.muted} />}
+          placeholder="Enter farmer's rate..."
+          icon={<Icon name="currency-inr" size={20} color={COLORS.text.muted} />}
         />
-
         <GlassInput
           label="Observation Notes"
           value={inspectionNotes}
@@ -1066,18 +1142,26 @@ export const InspectionsScreen: React.FC = () => {
           visible={!!inspectionToReview}
           animationType="fade"
           transparent={true}
-          onRequestClose={() => setInspectionToReview(null)}
+          onRequestClose={() => {
+            setInspectionToReview(null);
+            setIsRejecting(false);
+            setRejectReason('');
+          }}
         >
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.08)' }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Review Inspection</Text>
-                <TouchableOpacity onPress={() => setInspectionToReview(null)}>
+                <TouchableOpacity onPress={() => {
+                  setInspectionToReview(null);
+                  setIsRejecting(false);
+                  setRejectReason('');
+                }}>
                   <Icon name="close" size={24} color={THEME.colors.text.muted} />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.modalScroll}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 40 }}>
                 {(() => {
                   const farm = inspectionToReview?.farmId ? getFarmById(inspectionToReview.farmId) : null;
                   const farmLocation = inspectionToReview?.farmLocation || farm?.location || 'N/A';
@@ -1098,9 +1182,22 @@ export const InspectionsScreen: React.FC = () => {
                           <Text style={styles.detailLabel}>Item</Text>
                           <Text style={styles.detailValue}>{itemName}</Text>
                         </View>
+                      </View>
+
+                      {/* Rate Info */}
+                      {console.log("DEBUG_RATE_INFO", JSON.stringify(inspectionToReview, null, 2))}
+                      <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12, backgroundColor: 'rgba(57,255,20,0.05)', padding: 12, borderRadius: 12 }}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.detailLabel}>Est. Boxes</Text>
-                          <Text style={styles.detailValue}>{inspectionToReview?.estimatedBoxes}</Text>
+                          <Text style={styles.detailLabel}>Proposed Rate</Text>
+                          <Text style={[styles.detailValue, { color: COLORS.primary.main }]}>
+                            {(inspectionToReview?.proposedRate || inspectionToReview?.proposed_rate) ? `₹${inspectionToReview.proposedRate || inspectionToReview.proposed_rate}` : 'N/A'}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>Farmer Proposed Rate</Text>
+                          <Text style={[styles.detailValue, { color: COLORS.status.info }]}>
+                            {(inspectionToReview?.farmerProposedRate || inspectionToReview?.farmer_proposed_rate) ? `₹${inspectionToReview.farmerProposedRate || inspectionToReview.farmer_proposed_rate}` : 'N/A'}
+                          </Text>
                         </View>
                       </View>
                     </>
@@ -1149,32 +1246,287 @@ export const InspectionsScreen: React.FC = () => {
                   <Text style={styles.emptyText}>No video</Text>
                 )}
 
-                {inspectionToReview?.status === 'PENDING' && isApprover && (
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'REJECTED', reason: 'Declined by Admin' });
-                        setInspectionToReview(null);
-                      }}
-                      style={{ flex: 1, marginRight: 8, borderColor: '#EF4444', borderWidth: 1, padding: 12, borderRadius: 16, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Reject</Text>
-                    </TouchableOpacity>
+                {/* Negotiation / Approval Action Row */}
+                {inspectionToReview?.status === 'PENDING' && (
+                  <View style={{ marginTop: 12 }}>
 
-                    <TouchableOpacity
-                      onPress={() => {
-                        approveInspectionMutation.mutate({ id: inspectionToReview.id, status: 'APPROVED' });
-                        setInspectionToReview(null);
-                      }}
-                    >
-                      <LinearGradient
-                        colors={THEME.colors.button.primaryGradient}
-                        style={{ paddingVertical: 12, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', minWidth: 120 }}
-                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      >
-                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Approve</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
+                    {/* Counter Input View */}
+                    {isCountering ? (
+                      <View style={{ gap: 12 }}>
+                        <Text style={styles.sectionTitle}>Submit Counter Proposal</Text>
+                        <GlassInput
+                          label="Counter Rate (₹/box)"
+                          value={counterRate}
+                          onChangeText={setCounterRate}
+                          keyboardType="numeric"
+                          placeholder="e.g. 260"
+                        />
+                        <GlassInput
+                          label="Negotiation Notes (Optional)"
+                          value={negotiationNotes}
+                          onChangeText={setNegotiationNotes}
+                          placeholder="Reason for rate change..."
+                        />
+                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                          <TouchableOpacity
+                            style={[styles.reviewButton, { flex: 1, backgroundColor: 'transparent' }]}
+                            onPress={() => { setIsCountering(false); setCounterRate(''); setNegotiationNotes(''); }}
+                          >
+                            <Text style={{ color: COLORS.text.muted }}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1 }}
+                            onPress={() => {
+                              if (!counterRate) { Toast.show({ type: 'error', text1: 'Enter a rate' }); return; }
+                              // Use the unified approve mutation to send counter
+                              const payload = {
+                                id: inspectionToReview.id,
+                                rateStatus: (isApprover ? 'ADMIN_COUNTERED' : 'FARMER_COUNTERED') as 'ADMIN_COUNTERED' | 'FARMER_COUNTERED',
+                                proposedRate: isApprover ? parseFloat(counterRate) : undefined,
+                                farmerProposedRate: isVendor ? parseFloat(counterRate) : undefined,
+                                negotiationNotes
+                              };
+                              console.log('--- COUNTER PAYLOAD ---', payload);
+                              approveInspectionMutation.mutate(payload);
+                              setIsCountering(false);
+                              setCounterRate('');
+                              setNegotiationNotes('');
+                            }}
+                          >
+                            <LinearGradient colors={THEME.colors.button.primaryGradient} style={{ padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Submit Counter</Text>
+                            </LinearGradient>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : isRejecting ? (
+                      <View style={{ gap: 12, marginTop: 12 }}>
+                        <GlassInput
+                          label="Rejection Reason"
+                          value={rejectReason}
+                          onChangeText={setRejectReason}
+                          placeholder="Enter reason for rejection..."
+                        />
+                        <View style={styles.actionRow}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setIsRejecting(false);
+                              setRejectReason('');
+                            }}
+                            style={{ flex: 1, marginRight: 8, borderColor: '#64748B', borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: '#94A3B8', fontWeight: 'bold' }}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1 }}
+                            onPress={() => {
+                              approveInspectionMutation.mutate({
+                                id: inspectionToReview.id,
+                                status: 'REJECTED',
+                                reason: rejectReason || (isApprover ? 'Declined by Admin' : 'Declined/Cancelled by Farmer')
+                              });
+                            }}
+                          >
+                            <LinearGradient colors={['#EF4444', '#DC2626']} style={{ paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center' }}>
+                              <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Confirm Reject</Text>
+                            </LinearGradient>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+
+                      <View style={{ gap: 12 }}>
+                        {isApprover && (
+                          <>
+                            {/* Boxes to Allocate — full width */}
+                            <View>
+                              <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Boxes to Allocate</Text>
+                              <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: 'rgba(255,255,255,0.05)',
+                                borderRadius: 12,
+                                borderWidth: 1.5,
+                                borderColor: allocatedBoxes ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.10)',
+                                paddingHorizontal: 10,
+                                paddingVertical: 2,
+                                gap: 6,
+                              }}>
+                                <Icon name="package-variant-closed" size={16} color={allocatedBoxes ? COLORS.primary.main : '#64748B'} />
+                                <TextInput
+                                  value={allocatedBoxes}
+                                  onChangeText={setAllocatedBoxes}
+                                  keyboardType="numeric"
+                                  placeholder={`${inspectionToReview.estimatedBoxes ?? 0}`}
+                                  placeholderTextColor="#4B5563"
+                                  style={{ flex: 1, color: '#fff', fontSize: 15, fontWeight: '600', paddingVertical: 10 }}
+                                />
+                              </View>
+                            </View>
+
+                            {/* Box Inventory Item Selector */}
+                            {inventoryItems && inventoryItems.length > 0 && (
+                              <View style={{ marginTop: 4 }}>
+                                <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                                  Select Box Inventory Item
+                                </Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+                                  {inventoryItems.map((item: any) => {
+                                    const isSelected = selectedBoxItemId === item.id;
+                                    return (
+                                      <TouchableOpacity
+                                        key={item.id}
+                                        onPress={() => setSelectedBoxItemId(item.id)}
+                                        activeOpacity={0.75}
+                                        style={{
+                                          flexDirection: 'row',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                          paddingHorizontal: 14,
+                                          paddingVertical: 9,
+                                          borderRadius: 22,
+                                          borderWidth: 1.5,
+                                          borderColor: isSelected ? COLORS.primary.main : 'rgba(255,255,255,0.10)',
+                                          backgroundColor: isSelected ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.04)',
+                                        }}
+                                      >
+                                        <Icon
+                                          name={isSelected ? 'check-circle' : 'package-variant'}
+                                          size={14}
+                                          color={isSelected ? COLORS.primary.main : '#64748B'}
+                                        />
+                                        <Text style={{
+                                          color: isSelected ? COLORS.primary.main : '#94A3B8',
+                                          fontSize: 13,
+                                          fontWeight: isSelected ? '700' : '500',
+                                        }}>
+                                          {item.itemName || item.name || 'Unknown'}
+                                        </Text>
+                                        {(item.availableQuantity ?? item.currentStock) !== undefined && (
+                                          <View style={{ backgroundColor: isSelected ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                            <Text style={{ color: isSelected ? COLORS.primary.main : '#64748B', fontSize: 11, fontWeight: '600' }}>{item.availableQuantity ?? item.currentStock}</Text>
+                                          </View>
+                                        )}
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </ScrollView>
+                              </View>
+                            )}
+
+                            {/* Bottom Row: Counter Rate + Final Approve */}
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                              {inspectionToReview.rateStatus !== 'ACCEPTED' && (
+                                <TouchableOpacity
+                                  onPress={() => setIsCountering(true)}
+                                  activeOpacity={0.8}
+                                  style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 14,
+                                    borderWidth: 1.5,
+                                    borderColor: '#F59E0B',
+                                    backgroundColor: 'rgba(245,158,11,0.08)',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 6,
+                                  }}
+                                >
+                                  <Icon name="swap-horizontal" size={16} color="#F59E0B" />
+                                  <Text style={{ color: '#F59E0B', fontWeight: '700', fontSize: 14 }}>Counter Rate</Text>
+                                </TouchableOpacity>
+                              )}
+
+                              <TouchableOpacity
+                                disabled={inspectionToReview.rateStatus === 'ADMIN_COUNTERED' || approveInspectionMutation.isPending}
+                                style={{ flex: 1, opacity: (inspectionToReview.rateStatus === 'ADMIN_COUNTERED' || approveInspectionMutation.isPending) ? 0.5 : 1 }}
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                  const boxes = allocatedBoxes ? parseInt(allocatedBoxes, 10) : undefined;
+                                  approveInspectionMutation.mutate({
+                                    id: inspectionToReview.id,
+                                    status: 'APPROVED',
+                                    allocatedBoxes: boxes,
+                                    boxItemId: selectedBoxItemId || undefined,
+                                  });
+                                }}
+                              >
+                                <LinearGradient
+                                  colors={THEME.colors.button.primaryGradient}
+                                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                  style={{
+                                    paddingVertical: 16,
+                                    borderRadius: 16,
+                                    alignItems: 'center',
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    shadowColor: THEME.colors.button.shadow,
+                                    shadowOffset: { width: 0, height: 6 },
+                                    shadowOpacity: 0.6,
+                                    shadowRadius: 12,
+                                    elevation: 8,
+                                  }}
+                                >
+                                  {approveInspectionMutation.isPending ? (
+                                    <ActivityIndicator color="#000" size="small" />
+                                  ) : (
+                                    <>
+                                      <Icon name="check-decagram" size={20} color="#000" />
+                                      <Text style={{ color: '#000', fontWeight: '800', fontSize: 16, letterSpacing: 0.3 }}>Final Approve</Text>
+                                    </>
+                                  )}
+                                </LinearGradient>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        )}
+
+                        {/* Vendor Controls */}
+                        {isVendor && inspectionToReview.rateStatus === 'ADMIN_COUNTERED' && (
+                          <View style={styles.actionRow}>
+                            <TouchableOpacity
+                              onPress={() => setIsCountering(true)}
+                              style={{ flex: 1, marginRight: 8, borderColor: COLORS.status.info, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' }}
+                            >
+                              <Text style={{ color: COLORS.status.info, fontWeight: 'bold' }}>Counter Admin</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={{ flex: 1 }}
+                              onPress={() => approveInspectionMutation.mutate({
+                                id: inspectionToReview.id,
+                                rateStatus: 'ACCEPTED'
+                              })}
+                            >
+                              <LinearGradient colors={THEME.colors.button.primaryGradient} style={{ paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center' }}>
+                                <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Accept Admin Rate</Text>
+                              </LinearGradient>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {/* Global Reject for Admin */}
+                        {isApprover && (
+                          <TouchableOpacity
+                            onPress={() => setIsRejecting(true)}
+                            style={{ alignSelf: 'center', marginTop: 12, padding: 8 }}
+                          >
+                            <Text style={{ color: '#EF4444', fontWeight: '500' }}>Reject Inspection Entirely</Text>
+                          </TouchableOpacity>
+                        )}
+
+                        {/* Global Reject for Vendor (Farmer Decline/Cancel) */}
+                        {isVendor && (
+                          <TouchableOpacity
+                            onPress={() => setIsRejecting(true)}
+                            style={{ alignSelf: 'center', marginTop: 12 }}
+                          >
+                            <Text style={{ color: '#EF4444', fontWeight: '500' }}>Reject Inspection Entirely</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
               </ScrollView>
@@ -1212,8 +1564,8 @@ export const InspectionsScreen: React.FC = () => {
             onClose={() => setShowCamera(false)}
           />
         </Modal>
-      </SafeAreaView>
-    </LinearGradient>
+      </SafeAreaView >
+    </LinearGradient >
   );
 };
 

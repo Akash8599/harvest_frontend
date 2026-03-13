@@ -13,11 +13,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
+  Pressable,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
+import DatePicker from 'react-native-date-picker';
 
 import { GlassCard } from '../../components/glassmorphism/GlassCard';
 import { GlassButton } from '../../components/glassmorphism/GlassButton';
@@ -51,10 +53,18 @@ export const FarmsScreen: React.FC = () => {
   const [selectedFarmForRequest, setSelectedFarmForRequest] = useState<Farm | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [requestNotes, setRequestNotes] = useState('');
+  const [visitDate, setVisitDate] = useState(new Date());
+  const [showVisitDatePicker, setShowVisitDatePicker] = useState(false);
+  const [placeOfVisit, setPlaceOfVisit] = useState('');
+  const [visitorName, setVisitorName] = useState('');
+  const [visitorContact, setVisitorContact] = useState('');
+  const [proposedRate, setProposedRate] = useState('');
 
-  // Form State
+  // Farm Form State
   const [farmerName, setFarmerName] = useState('');
   const [location, setLocation] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
   const [totalArea, setTotalArea] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [produceType, setProduceType] = useState('Banana'); // Default
@@ -118,12 +128,14 @@ export const FarmsScreen: React.FC = () => {
     }
 
     let availableFarms = result.filter((farm: Farm) => {
+      // If a farm is COMPLETE, it should probably be visible just to see its history, or maybe hidden if only active farms are wanted.
+      // Let's hide HARVEST_IN_PROGRESS from the "available to request" view unless they are looking at all farms.
       const hasActiveBatch = batches?.some((batch: any) =>
         batch.farmId === farm.id &&
-        batch.status !== 'COMPLETED' &&
-        batch.status !== 'CANCELLED'
+        ['CREATED', 'IN_PROGRESS', 'HARVEST_IN_PROGRESS'].includes(batch.status)
       );
-      return !hasActiveBatch;
+      // Backend status is now updated. We can also just rely on farm.status directly.
+      return farm.status !== 'HARVEST_IN_PROGRESS' && !hasActiveBatch;
     });
 
     if (searchQuery) {
@@ -170,6 +182,8 @@ export const FarmsScreen: React.FC = () => {
   const resetForm = () => {
     setFarmerName('');
     setLocation('');
+    setLatitude('');
+    setLongitude('');
     setTotalArea('');
     setContactNumber('');
     setProduceType('Banana');
@@ -189,6 +203,8 @@ export const FarmsScreen: React.FC = () => {
     createFarmMutation.mutate({
       farmerName,
       location,
+      latitude: parseFloat(latitude) || 0,
+      longitude: parseFloat(longitude) || 0,
       totalArea: parseFloat(totalArea),
       areaUnit: 'Acres',
       contactNumber,
@@ -205,12 +221,20 @@ export const FarmsScreen: React.FC = () => {
       farmId: selectedFarmForRequest?.id,
       vendorId: selectedVendorId,
       notes: requestNotes,
-      status: 'PENDING'
+      visitDate: visitDate.toISOString().split('T')[0],
+      placeOfVisit: placeOfVisit.trim() || undefined,
+      visitorName: visitorName.trim() || undefined,
+      visitorContact: visitorContact.trim() || undefined,
+      proposedRate: proposedRate ? parseFloat(proposedRate) : undefined,
+      status: 'PENDING',
     });
   };
 
   const openRequestModal = (farm: Farm) => {
     setSelectedFarmForRequest(farm);
+    setVisitorName(farm.farmerName || '');
+    setVisitorContact(farm.contactNumber || '');
+    setPlaceOfVisit(farm.location || '');
     setIsRequestModalVisible(true);
   };
 
@@ -229,19 +253,28 @@ export const FarmsScreen: React.FC = () => {
 
   const renderFarmItem = ({ item }: { item: Farm }) => {
     const activeBatch = batches?.find((b: any) =>
-      b.farmId === item.id && b.status !== 'COMPLETED' && b.status !== 'CANCELLED'
+      b.farmId === item.id && ['CREATED', 'IN_PROGRESS', 'HARVEST_IN_PROGRESS'].includes(b.status)
     );
     const pendingRequest = allRequests?.find((r: any) =>
       r.farmId === item.id && r.status === 'PENDING'
     );
-    const isHarvesting = activeBatch?.status === 'HARVESTING';
+    const isHarvesting = activeBatch?.status === 'HARVESTING' || item.status === 'HARVEST_IN_PROGRESS';
+    const isCompleted = item.status === 'COMPLETED' || batches?.some((b: any) =>
+      b.farmId === item.id && ['HARVEST_COMPLETED', 'COMPLETED', 'DISPATCH_IN_PROGRESS', 'DISPATCH_COMPLETED', 'IN_TRANSIT', 'DELIVERED'].includes(b.status)
+    );
 
     // Status badge config
     let statusLabel = 'Available';
     let statusColor = COLORS.primary.main;
     let statusBg = 'rgba(34,197,94,0.12)';
     let statusIcon = 'check-circle-outline';
-    if (activeBatch) {
+
+    if (isCompleted) {
+      statusLabel = 'Completed';
+      statusColor = '#8B5CF6'; // Purple for completed
+      statusBg = 'rgba(139,92,246,0.12)';
+      statusIcon = 'check-all';
+    } else if (isHarvesting || activeBatch) {
       statusLabel = 'Harvesting';
       statusColor = '#F59E0B';
       statusBg = 'rgba(245,158,11,0.12)';
@@ -291,6 +324,12 @@ export const FarmsScreen: React.FC = () => {
               <Text style={styles.stripValue}>{item.contactNumber}</Text>
             </View>
           ) : null}
+          {item.latestVisitDate ? (
+            <View style={styles.stripItem}>
+              <Icon name="calendar-check" size={13} color={COLORS.text.muted} />
+              <Text style={styles.stripValue}>{new Date(item.latestVisitDate).toLocaleDateString()}</Text>
+            </View>
+          ) : null}
           {/* Status badge */}
           <View style={[styles.statusPill, { backgroundColor: statusBg }]}>
             <Icon name={statusIcon} size={12} color={statusColor} />
@@ -300,7 +339,12 @@ export const FarmsScreen: React.FC = () => {
 
         {/* Action row */}
         <View style={styles.cardActionRow}>
-          {activeBatch ? (
+          {isCompleted ? (
+            <View style={styles.lockedRow}>
+              <Icon name="check-all" size={13} color={COLORS.text.muted} />
+              <Text style={styles.lockedText}>Harvest cycle finished</Text>
+            </View>
+          ) : isHarvesting || activeBatch ? (
             // Farm is in a batch — no actions
             <View style={styles.lockedRow}>
               <Icon name="lock-outline" size={13} color={COLORS.text.muted} />
@@ -414,192 +458,214 @@ export const FarmsScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => { setIsModalVisible(false); setShowItemDropdown(false); }}
       >
-        <TouchableWithoutFeedback onPress={() => { setIsModalVisible(false); setShowItemDropdown(false); }}>
-          <View style={styles.centeredOverlay}>
-            {/* Stop press propagation to overlay — plain View, no TouchableWithoutFeedback */}
-            <View style={styles.centeredPopup} onStartShouldSetResponder={() => true}>
-              {/* Header */}
-              <LinearGradient
-                colors={['rgba(34,197,94,0.15)', 'transparent']}
-                style={styles.popupHeaderGradient}
-              >
-                <View style={styles.popupHeader}>
-                  <View style={styles.popupHeaderLeft}>
-                    <View style={styles.popupIconBox}>
-                      <Icon name="sprout" size={22} color={COLORS.primary.main} />
-                    </View>
-                    <Text style={styles.popupTitle}>Add New Farm</Text>
+        <View style={styles.centeredOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setIsModalVisible(false); setShowItemDropdown(false); }} />
+          <View style={styles.centeredPopup}>
+            {/* Header */}
+            <LinearGradient
+              colors={['rgba(34,197,94,0.15)', 'transparent']}
+              style={styles.popupHeaderGradient}
+            >
+              <View style={styles.popupHeader}>
+                <View style={styles.popupHeaderLeft}>
+                  <View style={styles.popupIconBox}>
+                    <Icon name="sprout" size={22} color={COLORS.primary.main} />
                   </View>
-                  <TouchableOpacity
-                    onPress={() => { setIsModalVisible(false); setShowItemDropdown(false); }}
-                    style={styles.popupCloseBtn}
-                  >
-                    <Icon name="close" size={20} color={COLORS.text.muted} />
-                  </TouchableOpacity>
+                  <Text style={styles.popupTitle}>Add New Farm</Text>
                 </View>
-              </LinearGradient>
-
-              {/* Form Body */}
-              <ScrollView
-                style={styles.popupScroll}
-                contentContainerStyle={styles.popupScrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                onScrollBeginDrag={() => setShowItemDropdown(false)}
-                scrollEventThrottle={16}
-              >
-                {/* Farmer Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Farmer Name</Text>
-                  <GlassInput
-                    value={farmerName}
-                    onChangeText={setFarmerName}
-                    placeholder="e.g. Ramesh Kumar"
-                    icon={<Icon name="account-outline" size={18} color={COLORS.primary.main} />}
-                  />
-                </View>
-
-                {/* Location */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Location / Village</Text>
-                  <GlassInput
-                    value={location}
-                    onChangeText={setLocation}
-                    placeholder="e.g. Nashik, Maharashtra"
-                    icon={<Icon name="map-marker-outline" size={18} color={COLORS.primary.main} />}
-                  />
-                </View>
-
-                {/* Produce Type Dropdown */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Produce / Crop Type</Text>
-                  <TouchableOpacity
-                    style={[styles.dropdownTrigger, showItemDropdown && styles.dropdownTriggerOpen]}
-                    onPress={() => setShowItemDropdown(v => !v)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.dropdownTriggerLeft}>
-                      <Icon name="leaf" size={18} color={COLORS.primary.main} />
-                      <Text style={styles.dropdownTriggerText}>{produceType}</Text>
-                    </View>
-                    <Icon
-                      name={showItemDropdown ? 'chevron-up' : 'chevron-down'}
-                      size={20}
-                      color={COLORS.text.muted}
-                    />
-                  </TouchableOpacity>
-
-                  {showItemDropdown && (
-                    <View style={styles.dropdownMenu}>
-                      {itemOptions.map((item, idx) => {
-                        const isSelected = produceType === item;
-                        const isLast = idx === itemOptions.length - 1;
-                        const icons: Record<string, string> = {
-                          Banana: 'food-apple-outline',
-                          Plantain: 'food-apple-outline',
-                          Mango: 'fruit-citrus',
-                          Orange: 'fruit-citrus',
-                          Papaya: 'leaf',
-                          Guava: 'leaf',
-                          Other: 'pencil-outline',
-                        };
-                        return (
-                          <TouchableOpacity
-                            key={item}
-                            style={[
-                              styles.dropdownItem,
-                              isSelected && styles.dropdownItemSelected,
-                              !isLast && styles.dropdownItemBorder,
-                            ]}
-                            onPress={() => {
-                              setProduceType(item);
-                              if (item !== 'Other') setCustomItem('');
-                              setShowItemDropdown(false);
-                            }}
-                          >
-                            <Icon
-                              name={icons[item] || 'leaf'}
-                              size={18}
-                              color={isSelected ? COLORS.primary.main : COLORS.text.muted}
-                            />
-                            <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
-                              {item}
-                            </Text>
-                            {isSelected && (
-                              <Icon name="check-circle" size={18} color={COLORS.primary.main} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {/* Custom input shown when Other is selected */}
-                  {produceType === 'Other' && !showItemDropdown && (
-                    <View style={styles.fieldGroupInner}>
-                      <Text style={styles.fieldLabelSmall}>Specify Fruit / Crop</Text>
-                      <GlassInput
-                        value={customItem}
-                        onChangeText={setCustomItem}
-                        placeholder="e.g. Pomegranate, Litchi..."
-                        icon={<Icon name="pencil-outline" size={18} color={COLORS.primary.main} />}
-                      />
-                    </View>
-                  )}
-                </View>
-
-                {/* Area + Contact row */}
-                <View style={styles.twoColRow}>
-                  <View style={[styles.twoColItem, { marginRight: 8 }]}>
-                    <Text style={styles.fieldLabel}>Area (Acres)</Text>
-                    <GlassInput
-                      value={totalArea}
-                      onChangeText={setTotalArea}
-                      placeholder="0.0"
-                      keyboardType="numeric"
-                      icon={<Icon name="ruler-square" size={18} color={COLORS.primary.main} />}
-                    />
-                  </View>
-                  <View style={[styles.twoColItem, { marginLeft: 8 }]}>
-                    <Text style={styles.fieldLabel}>Contact No.</Text>
-                    <GlassInput
-                      value={contactNumber}
-                      onChangeText={setContactNumber}
-                      placeholder="Phone"
-                      keyboardType="phone-pad"
-                      icon={<Icon name="phone-outline" size={18} color={COLORS.primary.main} />}
-                    />
-                  </View>
-                </View>
-              </ScrollView>
-
-              {/* Footer Button */}
-              <View style={styles.popupFooter}>
                 <TouchableOpacity
-                  onPress={handleCreateFarm}
-                  disabled={createFarmMutation.isPending}
-                  style={{ width: '100%' }}
-                  activeOpacity={0.85}
+                  onPress={() => { setIsModalVisible(false); setShowItemDropdown(false); }}
+                  style={styles.popupCloseBtn}
                 >
-                  <LinearGradient
-                    colors={COLORS.button.primaryGradient as string[]}
-                    style={styles.popupSubmitBtn}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  >
-                    {createFarmMutation.isPending ? (
-                      <ActivityIndicator color="#000" size="small" />
-                    ) : (
-                      <>
-                        <Icon name="sprout" size={20} color="#000" style={{ marginRight: 8 }} />
-                        <Text style={styles.popupSubmitText}>Create Farm</Text>
-                      </>
-                    )}
-                  </LinearGradient>
+                  <Icon name="close" size={20} color={COLORS.text.muted} />
                 </TouchableOpacity>
               </View>
+            </LinearGradient>
+
+            {/* Form Body */}
+            <ScrollView
+              style={styles.popupScroll}
+              contentContainerStyle={styles.popupScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollBeginDrag={() => setShowItemDropdown(false)}
+              scrollEventThrottle={16}
+            >
+              {/* Farmer Name */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Farmer Name</Text>
+                <GlassInput
+                  value={farmerName}
+                  onChangeText={setFarmerName}
+                  placeholder="e.g. Ramesh Kumar"
+                  icon={<Icon name="account-outline" size={18} color={COLORS.primary.main} />}
+                />
+              </View>
+
+              {/* Location */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Location / Village</Text>
+                <GlassInput
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="e.g. Nashik, Maharashtra"
+                  icon={<Icon name="map-marker-outline" size={18} color={COLORS.primary.main} />}
+                />
+              </View>
+
+              {/* Produce Type Dropdown */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Produce / Crop Type</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownTrigger, showItemDropdown && styles.dropdownTriggerOpen]}
+                  onPress={() => setShowItemDropdown(v => !v)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.dropdownTriggerLeft}>
+                    <Icon name="leaf" size={18} color={COLORS.primary.main} />
+                    <Text style={styles.dropdownTriggerText}>{produceType}</Text>
+                  </View>
+                  <Icon
+                    name={showItemDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={COLORS.text.muted}
+                  />
+                </TouchableOpacity>
+
+                {showItemDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    {itemOptions.map((item, idx) => {
+                      const isSelected = produceType === item;
+                      const isLast = idx === itemOptions.length - 1;
+                      const icons: Record<string, string> = {
+                        Banana: 'food-apple-outline',
+                        Plantain: 'food-apple-outline',
+                        Mango: 'fruit-citrus',
+                        Orange: 'fruit-citrus',
+                        Papaya: 'leaf',
+                        Guava: 'leaf',
+                        Other: 'pencil-outline',
+                      };
+                      return (
+                        <TouchableOpacity
+                          key={item}
+                          style={[
+                            styles.dropdownItem,
+                            isSelected && styles.dropdownItemSelected,
+                            !isLast && styles.dropdownItemBorder,
+                          ]}
+                          onPress={() => {
+                            setProduceType(item);
+                            if (item !== 'Other') setCustomItem('');
+                            setShowItemDropdown(false);
+                          }}
+                        >
+                          <Icon
+                            name={icons[item] || 'leaf'}
+                            size={18}
+                            color={isSelected ? COLORS.primary.main : COLORS.text.muted}
+                          />
+                          <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                            {item}
+                          </Text>
+                          {isSelected && (
+                            <Icon name="check-circle" size={18} color={COLORS.primary.main} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Custom input shown when Other is selected */}
+                {produceType === 'Other' && !showItemDropdown && (
+                  <View style={styles.fieldGroupInner}>
+                    <Text style={styles.fieldLabelSmall}>Specify Fruit / Crop</Text>
+                    <GlassInput
+                      value={customItem}
+                      onChangeText={setCustomItem}
+                      placeholder="e.g. Pomegranate, Litchi..."
+                      icon={<Icon name="pencil-outline" size={18} color={COLORS.primary.main} />}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* GPS Coordinates */}
+              <View style={styles.twoColRow}>
+                <View style={[styles.twoColItem, { marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Latitude</Text>
+                  <GlassInput
+                    value={latitude}
+                    onChangeText={setLatitude}
+                    placeholder="e.g. 19.9975"
+                    keyboardType="numeric"
+                    icon={<Icon name="latitude" size={18} color={COLORS.primary.main} />}
+                  />
+                </View>
+                <View style={[styles.twoColItem, { marginLeft: 8 }]}>
+                  <Text style={styles.fieldLabel}>Longitude</Text>
+                  <GlassInput
+                    value={longitude}
+                    onChangeText={setLongitude}
+                    placeholder="e.g. 73.7898"
+                    keyboardType="numeric"
+                    icon={<Icon name="longitude" size={18} color={COLORS.primary.main} />}
+                  />
+                </View>
+              </View>
+
+              {/* Area + Contact row */}
+              <View style={styles.twoColRow}>
+                <View style={[styles.twoColItem, { marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Area (Acres)</Text>
+                  <GlassInput
+                    value={totalArea}
+                    onChangeText={setTotalArea}
+                    placeholder="0.0"
+                    keyboardType="numeric"
+                    icon={<Icon name="ruler-square" size={18} color={COLORS.primary.main} />}
+                  />
+                </View>
+                <View style={[styles.twoColItem, { marginLeft: 8 }]}>
+                  <Text style={styles.fieldLabel}>Contact No.</Text>
+                  <GlassInput
+                    value={contactNumber}
+                    onChangeText={setContactNumber}
+                    placeholder="Phone"
+                    keyboardType="phone-pad"
+                    icon={<Icon name="phone-outline" size={18} color={COLORS.primary.main} />}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Footer Button */}
+            <View style={styles.popupFooter}>
+              <TouchableOpacity
+                onPress={handleCreateFarm}
+                disabled={createFarmMutation.isPending}
+                style={{ width: '100%' }}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={COLORS.button.primaryGradient as string[]}
+                  style={styles.popupSubmitBtn}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                >
+                  {createFarmMutation.isPending ? (
+                    <ActivityIndicator color="#000" size="small" />
+                  ) : (
+                    <>
+                      <Icon name="sprout" size={20} color="#000" style={{ marginRight: 8 }} />
+                      <Text style={styles.popupSubmitText}>Create Farm</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
 
       {/* Request Inspection Modal */}
@@ -609,122 +675,166 @@ export const FarmsScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setIsRequestModalVisible(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setIsRequestModalVisible(false)}>
-          <View style={styles.centeredOverlay}>
-            <View style={styles.centeredPopup} onStartShouldSetResponder={() => true}>
+        <View style={styles.centeredOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsRequestModalVisible(false)} />
+          <View style={styles.centeredPopup}>
 
-              {/* Header */}
-              <LinearGradient
-                colors={['rgba(34,197,94,0.15)', 'transparent']}
-                style={styles.popupHeaderGradient}
-              >
-                <View style={styles.popupHeader}>
-                  <View style={styles.popupHeaderLeft}>
-                    <View style={styles.popupIconBox}>
-                      <Icon name="clipboard-check-outline" size={22} color={COLORS.primary.main} />
-                    </View>
-                    <View>
-                      <Text style={styles.popupTitle}>Request Inspection</Text>
-                      {selectedFarmForRequest && (
-                        <Text style={{ fontSize: 12, color: COLORS.text.muted, marginTop: 2 }}>
-                          {selectedFarmForRequest.farmerName}
-                          {selectedFarmForRequest.produceType ? `  ·  ${selectedFarmForRequest.produceType}` : ''}
-                        </Text>
-                      )}
-                    </View>
+            {/* Header */}
+            <LinearGradient
+              colors={['rgba(34,197,94,0.15)', 'transparent']}
+              style={styles.popupHeaderGradient}
+            >
+              <View style={styles.popupHeader}>
+                <View style={styles.popupHeaderLeft}>
+                  <View style={styles.popupIconBox}>
+                    <Icon name="clipboard-check-outline" size={22} color={COLORS.primary.main} />
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setIsRequestModalVisible(false)}
-                    style={styles.popupCloseBtn}
-                  >
-                    <Icon name="close" size={20} color={COLORS.text.muted} />
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-
-              {/* Form Body */}
-              <ScrollView
-                style={styles.popupScroll}
-                contentContainerStyle={styles.popupScrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                scrollEventThrottle={16}
-              >
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Select Vendor</Text>
-                  {vendorsLoading ? (
-                    <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: 8 }} />
-                  ) : (
-                    <HorizontalScrollWrapper
-                      containerStyle={{ marginTop: 4 }}
-                      horizontalPadding={0}
-                      itemGap={8}
-                    >
-                      {vendors?.map((vendor: any) => {
-                        const isSelected = selectedVendorId === vendor.id;
-                        return (
-                          <TouchableOpacity
-                            key={vendor.id}
-                            style={[styles.vendorChip, isSelected && styles.vendorChipSelected]}
-                            onPress={() => setSelectedVendorId(vendor.id)}
-                            activeOpacity={0.8}
-                          >
-                            <View style={[styles.vendorChipDot, isSelected && styles.vendorChipDotSelected]}>
-                              <Icon name="account" size={12} color={isSelected ? '#000' : COLORS.primary.main} />
-                            </View>
-                            <Text style={[styles.vendorChipText, isSelected && styles.vendorChipTextSelected]}>
-                              {vendor.fullName || vendor.username}
-                            </Text>
-                            {isSelected && <Icon name="check" size={13} color={COLORS.primary.main} style={{ marginLeft: 4 }} />}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </HorizontalScrollWrapper>
-                  )}
-                </View>
-
-                {/* Notes */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Instructions / Notes</Text>
-                  <GlassInput
-                    value={requestNotes}
-                    onChangeText={setRequestNotes}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="e.g. Check for pest infestation on north field..."
-                    icon={<Icon name="note-text-outline" size={18} color={COLORS.primary.main} />}
-                  />
-                </View>
-              </ScrollView>
-
-              {/* Footer */}
-              <View style={styles.popupFooter}>
-                <TouchableOpacity
-                  onPress={handleRequestInspection}
-                  disabled={createRequestMutation.isPending}
-                  style={{ width: '100%' }}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient
-                    colors={COLORS.button.primaryGradient as string[]}
-                    style={styles.popupSubmitBtn}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  >
-                    {createRequestMutation.isPending ? (
-                      <ActivityIndicator color="#000" size="small" />
-                    ) : (
-                      <>
-                        <Icon name="send" size={18} color="#000" style={{ marginRight: 8 }} />
-                        <Text style={styles.popupSubmitText}>Send Request</Text>
-                      </>
+                  <View>
+                    <Text style={styles.popupTitle}>Request Inspection</Text>
+                    {selectedFarmForRequest && (
+                      <Text style={{ fontSize: 12, color: COLORS.text.muted, marginTop: 2 }}>
+                        {selectedFarmForRequest?.farmerName}
+                        {selectedFarmForRequest?.produceType ? `  ·  ${selectedFarmForRequest.produceType}` : ''}
+                      </Text>
                     )}
-                  </LinearGradient>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsRequestModalVisible(false)}
+                  style={styles.popupCloseBtn}
+                >
+                  <Icon name="close" size={20} color={COLORS.text.muted} />
                 </TouchableOpacity>
               </View>
+            </LinearGradient>
 
+            {/* Form Body */}
+            <ScrollView
+              style={styles.popupScroll}
+              contentContainerStyle={styles.popupScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={16}
+            >
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Select Vendor</Text>
+                {vendorsLoading ? (
+                  <ActivityIndicator color={COLORS.primary.main} style={{ marginVertical: 8 }} />
+                ) : (
+                  <HorizontalScrollWrapper
+                    containerStyle={{ marginTop: 4 }}
+                    horizontalPadding={0}
+                    itemGap={8}
+                  >
+                    {vendors?.map((vendor: any) => {
+                      const isSelected = selectedVendorId === vendor.id;
+                      return (
+                        <TouchableOpacity
+                          key={vendor.id}
+                          style={[styles.vendorChip, isSelected && styles.vendorChipSelected]}
+                          onPress={() => setSelectedVendorId(vendor.id)}
+                          activeOpacity={0.8}
+                        >
+                          <View style={[styles.vendorChipDot, isSelected && styles.vendorChipDotSelected]}>
+                            <Icon name="account" size={12} color={isSelected ? '#000' : COLORS.primary.main} />
+                          </View>
+                          <Text style={[styles.vendorChipText, isSelected && styles.vendorChipTextSelected]}>
+                            {vendor.fullName || vendor.username}
+                          </Text>
+                          {isSelected && <Icon name="check" size={13} color={COLORS.primary.main} style={{ marginLeft: 4 }} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </HorizontalScrollWrapper>
+                )}
+              </View>
+
+              {/* Visit Date */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Visit Date</Text>
+                <TouchableOpacity
+                  style={styles.dateSelector}
+                  onPress={() => setShowVisitDatePicker(true)}
+                >
+                  <Icon name="calendar" size={18} color={COLORS.primary.main} />
+                  <Text style={styles.dateSelectorText}>{visitDate.toLocaleDateString()}</Text>
+                </TouchableOpacity>
+                <DatePicker modal open={showVisitDatePicker} date={visitDate} mode="date"
+                  onConfirm={(d) => { setShowVisitDatePicker(false); setVisitDate(d); }}
+                  onCancel={() => setShowVisitDatePicker(false)} />
+              </View>
+
+              {/* Place of Visit */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Place of Visit</Text>
+                <GlassInput value={placeOfVisit} onChangeText={setPlaceOfVisit}
+                  placeholder="Village / District" icon={<Icon name="map-marker-outline" size={18} color={COLORS.primary.main} />} />
+              </View>
+
+              {/* Visitor Details */}
+              <View style={styles.twoColRow}>
+                <View style={[styles.twoColItem, { marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Visitor Name</Text>
+                  <GlassInput value={visitorName} onChangeText={setVisitorName}
+                    placeholder="Name" icon={<Icon name="account-outline" size={18} color={COLORS.primary.main} />} />
+                </View>
+                <View style={[styles.twoColItem, { marginLeft: 8 }]}>
+                  <Text style={styles.fieldLabel}>Visitor Contact</Text>
+                  <GlassInput value={visitorContact} onChangeText={setVisitorContact}
+                    placeholder="Phone" keyboardType="phone-pad" icon={<Icon name="phone-outline" size={18} color={COLORS.primary.main} />} />
+                </View>
+              </View>
+
+              {/* Rates */}
+              <View style={styles.twoColRow}>
+                <View style={[styles.twoColItem, { marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Proposed Rate (₹/box)</Text>
+                  <GlassInput value={proposedRate} onChangeText={setProposedRate}
+                    keyboardType="numeric" placeholder="0.00" icon={<Icon name="currency-inr" size={18} color={COLORS.primary.main} />} />
+                </View>
+              </View>
+
+              {/* Notes */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Instructions / Notes</Text>
+                <GlassInput
+                  value={requestNotes}
+                  onChangeText={setRequestNotes}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="e.g. Check for pest infestation on north field..."
+                  icon={<Icon name="note-text-outline" size={18} color={COLORS.primary.main} />}
+                />
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.popupFooter}>
+              <TouchableOpacity
+                onPress={handleRequestInspection}
+                disabled={createRequestMutation.isPending}
+                style={{ width: '100%' }}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={COLORS.button.primaryGradient as string[]}
+                  style={styles.popupSubmitBtn}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                >
+                  {createRequestMutation.isPending ? (
+                    <ActivityIndicator color="#000" size="small" />
+                  ) : (
+                    <>
+                      <Icon name="send" size={18} color="#000" style={{ marginRight: 8 }} />
+                      <Text style={styles.popupSubmitText}>Send Request</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
+
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </LinearGradient>
   );
@@ -739,6 +849,13 @@ const styles = StyleSheet.create({
   searchContainer: { paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: SPACING.lg, paddingBottom: 100 },
+  dateSelector: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: 'rgba(255,255,255,0.05)', padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: SPACING.sm,
+  },
+  dateSelectorText: { fontSize: TYPOGRAPHY.sizes.md, color: COLORS.text.primary },
 
   // ── Farm Card (compact premium) ─────────────────────────────────────
   farmCard: {

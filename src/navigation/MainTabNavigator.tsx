@@ -23,12 +23,14 @@ import { HarvestScreen } from '../screens/harvest/HarvestScreen';
 import { GatePassScreen } from '../screens/harvest/GatePassScreen';
 import { LedgerScreen } from '../screens/ledger/LedgerScreen';
 import { SalesScreen } from '../screens/sales/SalesScreen';
+import { ColdStorageScreen } from '../screens/coldStorage/ColdStorageScreen';
 
 export type MainTabParamList = {
   Dashboard: undefined;
   Farms: undefined;
   Batches: undefined;
   Inventory: undefined;
+  ColdStorage: undefined;
   Profile: undefined;
   Inspections: undefined;
   Harvest: undefined;
@@ -53,6 +55,7 @@ const TAB_ITEMS: TabItem[] = [
   { name: 'Batches', icon: 'package-variant', label: 'Batches', roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER] },
   { name: 'Harvest', icon: 'basket', label: 'Harvest', roles: [UserRole.VENDOR] },
   { name: 'GatePass', icon: 'truck-delivery', label: 'Gate Pass', roles: [UserRole.VENDOR, UserRole.STORE_KEEPER] },
+  { name: 'ColdStorage', icon: 'snowflake', label: 'Cold Storage', roles: [UserRole.STORE_KEEPER] },
   { name: 'Inventory', icon: 'warehouse', label: 'Inventory', roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER, UserRole.STORE_KEEPER] },
   { name: 'Sales', icon: 'cash-register', label: 'Sales', roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER] },
   { name: 'Ledger', icon: 'book-open', label: 'Ledger', roles: [UserRole.VENDOR] },
@@ -64,14 +67,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Batch, BatchStatus } from '../types';
 
 // ... (existing imports)
-
-interface TabItem {
-  name: keyof MainTabParamList;
-  icon: string;
-  label: string;
-  roles: UserRole[];
-  badgeCount?: number; // Add badge property
-}
 
 // ... (TAB_ITEMS definition remains)
 
@@ -212,7 +207,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
     if (tabName === 'Farms') {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const recentFarms = farms.filter((f: any) => 
+      const recentFarms = farms.filter((f: any) =>
         new Date(f.createdAt) >= sevenDaysAgo
       ).length;
       return recentFarms;
@@ -228,9 +223,9 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
     // Gate Pass: Show pending dispatch batches for everyone
     if (tabName === 'GatePass') {
       count = batches.filter((b: Batch) =>
-        b.status !== BatchStatus.DISPATCH_COMPLETED && 
-        b.status !== BatchStatus.IN_TRANSIT && 
-        b.status !== BatchStatus.DELIVERED && 
+        b.status !== BatchStatus.DISPATCH_COMPLETED &&
+        b.status !== BatchStatus.IN_TRANSIT &&
+        b.status !== BatchStatus.DELIVERED &&
         b.status !== BatchStatus.CANCELLED
       ).length;
     }
@@ -321,7 +316,7 @@ export const MainTabNavigator: React.FC = () => {
       case UserRole.VENDOR:
         return 'Inspections';
       case UserRole.STORE_KEEPER:
-        return 'Inventory';
+        return 'ColdStorage';
       default:
         return 'Dashboard';
     }
@@ -341,6 +336,7 @@ export const MainTabNavigator: React.FC = () => {
       <Tab.Screen name="Batches" component={BatchesScreen} />
       <Tab.Screen name="Harvest" component={HarvestScreen} />
       <Tab.Screen name="GatePass" component={GatePassScreen} />
+      <Tab.Screen name="ColdStorage" component={ColdStorageScreen} />
       <Tab.Screen name="Inventory" component={InventoryScreen} />
       <Tab.Screen name="Sales" component={SalesScreen} />
       <Tab.Screen name="Ledger" component={LedgerScreen} />

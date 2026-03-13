@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator, Image, Alert } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS } from '../../constants';
 
@@ -17,6 +17,7 @@ export const CameraScreen: React.FC<CameraComponentProps> = ({ onCapture, onClos
     const [isFrontCamera, setIsFrontCamera] = useState(false);
     const [flash, setFlash] = useState<'off' | 'on'>('off');
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+    const [isTakingPhoto, setIsTakingPhoto] = useState(false);
 
     const device = useCameraDevice(isFrontCamera ? 'front' : 'back');
     const { hasPermission, requestPermission } = useCameraPermission();
@@ -35,18 +36,29 @@ export const CameraScreen: React.FC<CameraComponentProps> = ({ onCapture, onClos
     }, [hasPermission]);
 
     const handleCapture = useCallback(async () => {
-        if (camera.current) {
+        if (camera.current && !isTakingPhoto) {
+            setIsTakingPhoto(true);
             try {
+                console.log('Taking photo...');
                 const photo = await camera.current.takePhoto({
                     flash: flash,
+                    enableShutterSound: false,
+                    qualityPrioritization: 'balanced',
                 });
                 const path = `file://${photo.path}`;
                 setCapturedPhoto(path);
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Failed to take photo:', error);
+                // Log more specific info if available
+                if (error.code) console.log('Error code:', error.code);
+                if (error.message) console.log('Error message:', error.message);
+
+                Alert.alert('Capture Error', `Could not take photo: ${error.message || 'Unknown error'}`);
+            } finally {
+                setIsTakingPhoto(false);
             }
         }
-    }, [flash]);
+    }, [flash, isTakingPhoto]);
 
     const handleConfirm = () => {
         if (capturedPhoto) {
@@ -125,8 +137,16 @@ export const CameraScreen: React.FC<CameraComponentProps> = ({ onCapture, onClos
             {/* Bottom Controls */}
             <View style={styles.bottomControls}>
                 <View style={{ flex: 1 }} />
-                <TouchableOpacity onPress={handleCapture} style={styles.captureButton}>
-                    <View style={styles.captureInner} />
+                <TouchableOpacity
+                    onPress={handleCapture}
+                    style={[styles.captureButton, isTakingPhoto && { opacity: 0.5 }]}
+                    disabled={isTakingPhoto}
+                >
+                    {isTakingPhoto ? (
+                        <ActivityIndicator color="#fff" size="large" />
+                    ) : (
+                        <View style={styles.captureInner} />
+                    )}
                 </TouchableOpacity>
                 <View style={{ flex: 1, alignItems: 'center' }}>
                     <TouchableOpacity onPress={() => setIsFrontCamera(prev => !prev)} style={styles.iconButton}>

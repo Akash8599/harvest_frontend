@@ -38,6 +38,7 @@ export const InventoryScreen: React.FC = () => {
   // Forms - Create Item
   const [itemName, setItemName] = useState('');
   const [itemCode, setItemCode] = useState('');
+  const [initialStock, setInitialStock] = useState('');
 
   // Forms - Add Stock
   const [stockQuantity, setStockQuantity] = useState('');
@@ -97,11 +98,25 @@ export const InventoryScreen: React.FC = () => {
   // 1. Create New Inventory Item
   const createItemMutation = useMutation({
     mutationFn: (data: any) => inventoryApi.createItem(data),
-    onSuccess: () => {
+    onSuccess: async (response) => {
       Toast.show({ type: 'success', text1: 'Item Created', text2: `${itemName} added to inventory.` });
+
+      const newItemId = response.data?.data?.id;
+      const initialQty = parseInt(initialStock);
+
+      if (newItemId && !isNaN(initialQty) && initialQty > 0) {
+        try {
+          await inventoryApi.addStock(newItemId, initialQty);
+          Toast.show({ type: 'success', text1: 'Stock Added', text2: `Added ${initialQty} units to ${itemName}.` });
+        } catch (e) {
+          Toast.show({ type: 'error', text1: 'Stock Update Failed', text2: 'Item created but failed to add initial stock.' });
+        }
+      }
+
       setIsAddItemVisible(false);
       setItemName('');
       setItemCode('');
+      setInitialStock('');
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
     },
     onError: (error: any) => {
@@ -570,6 +585,13 @@ export const InventoryScreen: React.FC = () => {
               <Text style={styles.modalTitle}>New Inventory Item</Text>
               <GlassInput label="Item Name" value={itemName} onChangeText={setItemName} placeholder="e.g. Cardboard Box" />
               <GlassInput label="Item Code" value={itemCode} onChangeText={setItemCode} placeholder="e.g. BOX-001" />
+              <GlassInput
+                label="Initial Stock (Optional)"
+                value={initialStock}
+                onChangeText={setInitialStock}
+                placeholder="e.g. 500"
+                keyboardType="numeric"
+              />
               <GlassButton title="Create Item" onPress={handleCreateItem} loading={createItemMutation.isPending} variant="primary" style={styles.modalBtn} />
               <GlassButton title="Cancel" onPress={() => setIsAddItemVisible(false)} variant="secondary" />
             </GlassCard>
@@ -679,7 +701,7 @@ const styles = StyleSheet.create({
 
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', padding: SPACING.lg },
-  modalContent: { padding: SPACING.lg },
+  modalContent: { padding: SPACING.lg, backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 },
   modalTitle: { fontSize: TYPOGRAPHY.sizes.xl, fontWeight: 'bold', color: COLORS.text.primary, marginBottom: SPACING.sm },
   modalSubtitle: { fontSize: TYPOGRAPHY.sizes.md, color: COLORS.text.secondary, marginBottom: SPACING.lg },
   modalBtn: { marginBottom: SPACING.sm, marginTop: SPACING.md },

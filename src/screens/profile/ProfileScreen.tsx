@@ -17,8 +17,6 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export const ProfileScreen = () => {
   const { user, logout } = useAuthStore();
   const navigation = useNavigation<NavigationProp>();
-  const userRole = user?.role;
-
   const handleLogout = () => {
     Alert.alert(
       "Logout",
@@ -64,9 +62,11 @@ export const ProfileScreen = () => {
                 </LinearGradient>
               </View>
 
-              <View style={[styles.roleBadge, { backgroundColor: COLORS.glass.card }]}>
+              <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
                 <Icon name="shield-check" size={12} color={COLORS.primary.main} />
-                <Text style={styles.roleText}>{user?.role.replace('_', ' ')}</Text>
+                <Text style={styles.roleText}>
+                  {user?.role === 'MANAGER' ? 'SUPERVISOR' : user?.role.replace('_', ' ')}
+                </Text>
               </View>
 
               <Text style={styles.userName}>{user?.fullName}</Text>
@@ -88,8 +88,8 @@ export const ProfileScreen = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Support</Text>
             <GlassCard style={styles.menuGroup}>
-              {user?.role === UserRole.SUPER_ADMIN && (
-                <MenuRow title="Manage Users" icon="account-group-outline" onPress={() => navigation.navigate('UserApproval')} />
+              {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.MANAGER) && (
+                <MenuRow title="Manage Users" icon="account-group-outline" onPress={() => navigation.navigate('UserManagement')} />
               )}
               <MenuRow title="Help Center" icon="help-circle-outline" onPress={() => { }} />
               <MenuRow title="Report an Issue" icon="alert-circle-outline" onPress={() => { }} isLast />
